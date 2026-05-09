@@ -57,8 +57,13 @@ endfunction()
 # 安装第三方库
 install(DIRECTORY ${THIRDPARTY_DIR}/bin DESTINATION /)
 # ======================== 子项目 ========================
+# 定义选项，默认为 ON
+option(BUILD_EXAMPLES "Build example programs" OFF)
 
-#add_subdirectory(test)
-add_subdirectory(example)
+if(BUILD_EXAMPLES)
+    add_subdirectory(example)
+endif()
+
 add_subdirectory(shader)
 add_subdirectory(core)
+add_subdirectory(viewer)

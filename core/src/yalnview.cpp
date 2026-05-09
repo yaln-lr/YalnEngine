@@ -131,15 +131,26 @@ void YalnView::recreateSwapChain()
     // 等待设备空闲
     m_device.waitIdle();
 
-    // 清理现有资源
+    // 清理现有资源（按照依赖顺序）
     m_swapChainFramebuffers.clear();
     m_swapChainImageViews.clear();
+    m_graphicsPipeline = nullptr;  // 管线依赖视口大小
+    m_renderPass = nullptr;        // 渲染通道依赖交换链格式
+    m_descriptorSets.clear();      // 描述符集依赖管线布局
+    m_descriptorPool = nullptr;    // 描述符池需要重建
+    m_commandBuffers.clear();     // 命令缓冲区依赖管线和帧缓冲
     m_swapChain = nullptr;
 
     // 重建交换链相关资源
     createSwapChain();
+    createRenderPass();
+    createGraphicsPipeline();
+    createDescriptorPool();
+    createDescriptorSets();
     createImageViews();
     createFramebuffers();
+    createCommandBuffers();
+    createSyncObjects();  // 重建同步对象以匹配新的交换链图像数量
     m_framebufferResized = false;
 }
 

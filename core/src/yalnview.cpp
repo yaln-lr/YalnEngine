@@ -131,26 +131,15 @@ void YalnView::recreateSwapChain()
     // 等待设备空闲
     m_device.waitIdle();
 
-    // 清理现有资源（按照依赖顺序）
+    // 清理现有资源
     m_swapChainFramebuffers.clear();
     m_swapChainImageViews.clear();
-    m_graphicsPipeline = nullptr;  // 管线依赖视口大小
-    m_renderPass = nullptr;        // 渲染通道依赖交换链格式
-    m_descriptorSets.clear();      // 描述符集依赖管线布局
-    m_descriptorPool = nullptr;    // 描述符池需要重建
-    m_commandBuffers.clear();     // 命令缓冲区依赖管线和帧缓冲
     m_swapChain = nullptr;
 
-    // 重建交换链相关资源
+    // 重建交换链相关资源（使用动态视口，不需要重建管线）
     createSwapChain();
-    createRenderPass();
-    createGraphicsPipeline();
-    createDescriptorPool();
-    createDescriptorSets();
     createImageViews();
     createFramebuffers();
-    createCommandBuffers();
-    createSyncObjects();  // 重建同步对象以匹配新的交换链图像数量
     m_framebufferResized = false;
 }
 
@@ -563,14 +552,16 @@ void YalnView::createGraphicsPipeline()
         VK_FALSE
     );
 
-    vk::Viewport viewport(0.0f, 0.0f,
-                          static_cast<float>(m_swapChainExtent.width),
-                          static_cast<float>(m_swapChainExtent.height),
-                          0.0f, 1.0f);
+    // 使用动态视口和裁剪区域，这样 resize 时不需要重建管线
+    vk::PipelineDynamicStateCreateInfo dynamicStateInfo{};
+    std::array<vk::DynamicState, 2> dynamicStates = {
+        vk::DynamicState::eViewport,
+        vk::DynamicState::eScissor
+    };
+    dynamicStateInfo.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+    dynamicStateInfo.pDynamicStates = dynamicStates.data();
 
-    vk::Rect2D scissor({0, 0}, m_swapChainExtent);
-
-    vk::PipelineViewportStateCreateInfo viewportState({}, 1, &viewport, 1, &scissor);
+    vk::PipelineViewportStateCreateInfo viewportState({}, 1, nullptr, 1, nullptr);
 
     vk::PipelineRasterizationStateCreateInfo rasterizer(
         {},
@@ -631,7 +622,7 @@ void YalnView::createGraphicsPipeline()
         &multisampling,
         nullptr,
         &colorBlending,
-        nullptr,
+        &dynamicStateInfo,  // 添加动态状态信息
         *m_pipelineLayout,
         *m_renderPass,
         0,
@@ -962,17 +953,18 @@ void YalnView::drawFrame()
     }
 
     // 更新 uniform buffer
-    static auto startTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+    //static auto startTime = std::chrono::high_resolution_clock::now();
+    //auto currentTime = std::chrono::high_resolution_clock::now();
+    //float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
     UniformBufferObject ubo{};
     // 与 YalnEngineC 保持一致 - 绕 Z 轴旋转
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     // ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     // float aspect = static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height);
     // ubo.proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
     // ubo.proj[1][1] *= -1; // Vulkan Y轴向下
+    ubo.model = glm::identity<glm::mat4>();
     ubo.proj_view_mat = m_camera_ptr->getMatrix();
     if (frameCount <= 3) {
         std::cerr << "[DEBUG] UniformBufferObject size: " << sizeof(UniformBufferObject) << std::endl;
@@ -991,7 +983,7 @@ void YalnView::drawFrame()
     vk::CommandBufferBeginInfo beginInfo{};
     m_commandBuffers[imageIndex].begin(beginInfo);
 
-    vk::ClearValue clearColor(vk::ClearColorValue(std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}));
+    vk::ClearValue clearColor(vk::ClearColorValue(std::array<float, 4>{0.0f, 0.1f, 0.25f, 1.0f}));
     vk::RenderPassBeginInfo renderPassInfo(
         *m_renderPass,
         *m_swapChainFramebuffers[imageIndex],
@@ -1002,6 +994,16 @@ void YalnView::drawFrame()
     m_commandBuffers[imageIndex].beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
     m_commandBuffers[imageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, *m_graphicsPipeline);
+
+    // 设置动态视口和裁剪区域（支持 resize）
+    vk::Viewport viewport(0.0f, 0.0f,
+                          static_cast<float>(m_swapChainExtent.width),
+                          static_cast<float>(m_swapChainExtent.height),
+                          0.0f, 1.0f);
+    m_commandBuffers[imageIndex].setViewport(0, viewport);
+
+    vk::Rect2D scissor({0, 0}, m_swapChainExtent);
+    m_commandBuffers[imageIndex].setScissor(0, scissor);
 
     m_commandBuffers[imageIndex].bindVertexBuffers(0, {*m_vertexBuffer}, {0});
 

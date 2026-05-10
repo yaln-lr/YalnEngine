@@ -175,17 +175,14 @@ void QtViewer::resizeEvent(QResizeEvent* event)
     QSize size = event->size();
     m_width = size.width();
     m_height = size.height();
-    std::cerr << "[RESIZE] Qt size: " << m_width << "x" << m_height << std::endl;
 
     // 如果 Vulkan 已初始化，重新创建交换链
     if (m_swapChain != nullptr) {
         recreateSwapChain();
         // 使用交换链的实际大小更新相机宽高比
         if (m_camera_ptr) {
-            std::cerr << "[RESIZE] SwapChain extent: " << m_swapChainExtent.width << "x" << m_swapChainExtent.height << std::endl;
             float aspect = static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height);
             m_camera_ptr->setAspectRatio(aspect);
-            std::cerr << "[RESIZE] Camera aspect ratio set to: " << aspect << std::endl;
         }
     }
 }

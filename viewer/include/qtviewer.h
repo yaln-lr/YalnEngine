@@ -58,7 +58,7 @@ public:
     void setAutoRotateSpeed(float speed) { m_autoRotateSpeed = speed; }
     float getAutoRotateSpeed() const { return m_autoRotateSpeed; }
     YalnCameraPtr getCamera() const { return m_camera_ptr; }
-    void setMesh(YalnMesh* mesh) { YalnView::setMesh(mesh); }
+    void addMesh(YalnMesh* mesh) { YalnView::addMesh(mesh); }
 
 private:
     QTimer* m_renderTimer = nullptr;

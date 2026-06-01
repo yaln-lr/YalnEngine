@@ -103,8 +103,11 @@ protected:
     void createIndexBuffer();    // 保留兼容接口，内部调用setMesh
     
     // 延迟加载：设置网格后自动创建/更新缓冲区
-    void setMesh(YalnMesh* mesh);
-    bool isMeshReady() const { return m_vertexBuffer != nullptr && m_indexBuffer != nullptr; }
+public:
+    void addMesh(YalnMesh* mesh);  // 添加一个网格
+    void clearMeshes();  // 清空所有网格
+    bool isMeshReady() const { return !m_meshes.empty() && m_meshes.size() == m_meshBuffers.size(); }
+protected:
     void createMeshBuffers();  // 延迟创建缓冲区
     void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
                       vk::MemoryPropertyFlags properties,
@@ -171,9 +174,16 @@ protected:
     bool m_framebufferResized = false;
     YalnCameraPtr m_camera_ptr = nullptr;
     
-    // 延迟加载的网格数据
-    YalnMesh* m_mesh = nullptr;
-    uint32_t m_indexCount = 0;
+    // 延迟加载的网格数据（支持多个网格）
+    std::vector<YalnMesh*> m_meshes;
+    struct MeshBuffer {
+        vk::raii::Buffer vertexBuffer{ nullptr };
+        vk::raii::DeviceMemory vertexBufferMemory{ nullptr };
+        vk::raii::Buffer indexBuffer{ nullptr };
+        vk::raii::DeviceMemory indexBufferMemory{ nullptr };
+        uint32_t indexCount = 0;
+    };
+    std::vector<MeshBuffer> m_meshBuffers;
 
 private:
     const std::vector<const char*> m_validationLayers = {

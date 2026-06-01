@@ -149,9 +149,16 @@ int main(int argc, char *argv[])
     camera->setTarget(glm::vec3(0.0f, 0.0f, 0.0f));
     viewer->setCameta(camera);
 
-    // 设置网格（创建球体作为示例）
+    // 添加球体到场景
     YalnSphere sphere;
-    viewer->setMesh(&sphere);
+    sphere.m_position = glm::vec3(0.0f, 0.0f, 0.0f);
+    viewer->addMesh(&sphere);
+
+    // 添加正方体到球体左边
+    YalnCube cube;
+    cube.m_position = glm::vec3(-1.5f, 0.0f, 0.0f);
+    cube.m_rotation = glm::vec3(0.0f, glm::radians(45.0f), 0.0f);  // 绕Y轴旋转45度
+    viewer->addMesh(&cube);
 
     // 启动渲染循环
     viewer->startRenderLoop();

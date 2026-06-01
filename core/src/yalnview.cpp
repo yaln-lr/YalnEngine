@@ -4,6 +4,7 @@
 #include <limits>
 #include <algorithm>
 #include <set>
+#include <utility>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 //#include "../hpp/vertexattribute.hpp"
@@ -13,11 +14,8 @@ constexpr bool ENABLE_VALIDATION_LAYER = false;
 constexpr bool ENABLE_VALIDATION_LAYER = true;
 #endif
 
-// Uniform Buffer Object 结构体
+// Uniform Buffer Object 结构体（仅投影-视图矩阵）
 struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-    // alignas(16) glm::mat4 view;
-    // alignas(16) glm::mat4 proj;
     alignas(16) glm::mat4 proj_view_mat;
 };
 
@@ -603,10 +601,11 @@ void YalnView::createGraphicsPipeline()
         {0.0f, 0.0f, 0.0f, 0.0f}
     );
 
+    vk::PushConstantRange pushConstantRange(vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4));
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
         {},
         1, &*m_descriptorSetLayout,
-        0, nullptr
+        1, &pushConstantRange
     );
 
     m_pipelineLayout = vk::raii::PipelineLayout(m_device, pipelineLayoutInfo);
@@ -724,18 +723,27 @@ void YalnView::copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::Device
 
 // ======================== Mesh Setup (Lazy Loading) ========================
 
-void YalnView::setMesh(YalnMesh* mesh)
+void YalnView::addMesh(YalnMesh* mesh)
 {
-    m_mesh = mesh;
-    if (*m_device != VK_NULL_HANDLE && mesh && mesh->isValid()) {
+    m_meshes.push_back(mesh);
+    std::cerr << "[DEBUG] addMesh called: mesh=" << mesh << ", valid=" << mesh->isValid() 
+              << ", device=" << (m_device != nullptr) << std::endl;
+    if (m_device != nullptr && mesh && mesh->isValid()) {
         createMeshBuffers();
     }
 }
 
+void YalnView::clearMeshes()
+{
+    m_device.waitIdle();
+    m_meshes.clear();
+    m_meshBuffers.clear();
+}
+
 void YalnView::createMeshBuffers()
 {
-    if (!m_mesh || !m_mesh->isValid()) {
-        std::cerr << "YalnView::createMeshBuffers: Invalid mesh data!" << std::endl;
+    if (m_meshes.empty()) {
+        std::cerr << "YalnView::createMeshBuffers: No meshes to create!" << std::endl;
         return;
     }
 
@@ -743,63 +751,73 @@ void YalnView::createMeshBuffers()
     m_device.waitIdle();
 
     // 清空旧缓冲区
-    m_vertexBuffer = nullptr;
-    m_indexBuffer = nullptr;
+    m_meshBuffers.clear();
 
-    // 获取顶点数据
-    const auto& vertices = m_mesh->getVertices();
-    const auto& indices = m_mesh->getIndices();
-    m_indexCount = static_cast<uint32_t>(indices.size());
+    // 为每个网格创建缓冲区
+    for (size_t i = 0; i < m_meshes.size(); i++) {
+        YalnMesh* mesh = m_meshes[i];
+        if (!mesh || !mesh->isValid()) {
+            std::cerr << "YalnView::createMeshBuffers: Invalid mesh at index " << i << std::endl;
+            continue;
+        }
 
-    // 创建顶点缓冲区
-    vk::DeviceSize vertexBufferSize = sizeof(vertices[0]) * vertices.size();
-    vk::raii::Buffer stagingVertexBuffer{ nullptr };
-    vk::raii::DeviceMemory stagingVertexMemory{ nullptr };
-    createBuffer(vertexBufferSize,
-                 vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 stagingVertexBuffer, stagingVertexMemory);
+        MeshBuffer mb;
+        const auto& vertices = mesh->getVertices();
+        const auto& indices = mesh->getIndices();
+        mb.indexCount = static_cast<uint32_t>(indices.size());
 
-    void* vertexData = stagingVertexMemory.mapMemory(0, vertexBufferSize);
-    std::memcpy(vertexData, vertices.data(), static_cast<size_t>(vertexBufferSize));
-    stagingVertexMemory.unmapMemory();
+        // 创建顶点缓冲区
+        vk::DeviceSize vertexBufferSize = sizeof(vertices[0]) * vertices.size();
+        vk::raii::Buffer stagingVertexBuffer{ nullptr };
+        vk::raii::DeviceMemory stagingVertexMemory{ nullptr };
+        createBuffer(vertexBufferSize,
+                     vk::BufferUsageFlagBits::eTransferSrc,
+                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                     stagingVertexBuffer, stagingVertexMemory);
 
-    createBuffer(vertexBufferSize,
-                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal,
-                 m_vertexBuffer, m_vertexBufferMemory);
-    copyBuffer(*stagingVertexBuffer, *m_vertexBuffer, vertexBufferSize);
+        void* vertexData = stagingVertexMemory.mapMemory(0, vertexBufferSize);
+        std::memcpy(vertexData, vertices.data(), static_cast<size_t>(vertexBufferSize));
+        stagingVertexMemory.unmapMemory();
 
-    // 创建索引缓冲区
-    vk::DeviceSize indexBufferSize = sizeof(indices[0]) * indices.size();
-    vk::raii::Buffer stagingIndexBuffer{ nullptr };
-    vk::raii::DeviceMemory stagingIndexMemory{ nullptr };
-    createBuffer(indexBufferSize,
-                 vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 stagingIndexBuffer, stagingIndexMemory);
+        createBuffer(vertexBufferSize,
+                     vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+                     vk::MemoryPropertyFlagBits::eDeviceLocal,
+                     mb.vertexBuffer, mb.vertexBufferMemory);
+        copyBuffer(*stagingVertexBuffer, *mb.vertexBuffer, vertexBufferSize);
 
-    void* indexData = stagingIndexMemory.mapMemory(0, indexBufferSize);
-    std::memcpy(indexData, indices.data(), static_cast<size_t>(indexBufferSize));
-    stagingIndexMemory.unmapMemory();
+        // 创建索引缓冲区
+        vk::DeviceSize indexBufferSize = sizeof(indices[0]) * indices.size();
+        vk::raii::Buffer stagingIndexBuffer{ nullptr };
+        vk::raii::DeviceMemory stagingIndexMemory{ nullptr };
+        createBuffer(indexBufferSize,
+                     vk::BufferUsageFlagBits::eTransferSrc,
+                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                     stagingIndexBuffer, stagingIndexMemory);
 
-    createBuffer(indexBufferSize,
-                 vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal,
-                 m_indexBuffer, m_indexBufferMemory);
-    copyBuffer(*stagingIndexBuffer, *m_indexBuffer, indexBufferSize);
+        void* indexData = stagingIndexMemory.mapMemory(0, indexBufferSize);
+        std::memcpy(indexData, indices.data(), static_cast<size_t>(indexBufferSize));
+        stagingIndexMemory.unmapMemory();
 
-    std::cout << "YalnView: Mesh buffers created (vertices: " << vertices.size() 
-              << ", indices: " << indices.size() << ")" << std::endl;
+        createBuffer(indexBufferSize,
+                     vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+                     vk::MemoryPropertyFlagBits::eDeviceLocal,
+                     mb.indexBuffer, mb.indexBufferMemory);
+        copyBuffer(*stagingIndexBuffer, *mb.indexBuffer, indexBufferSize);
+
+        m_meshBuffers.push_back(std::move(mb));
+
+        std::cout << "YalnView: Mesh buffer created [" << i << "] (vertices: " << vertices.size() 
+                  << ", indices: " << indices.size() << ")" << std::endl;
+    }
 }
 
 // ======================== Vertex Buffer ========================
 
 void YalnView::createVertexBuffer()
 {
-    // 使用YalnCube的默认实例
+    // 创建默认立方体作为示例
     YalnCube defaultCube;
-    setMesh(&defaultCube);
+    addMesh(&defaultCube);
 }
 
 // ======================== Index Buffer ========================
@@ -813,7 +831,7 @@ void YalnView::createIndexBuffer()
 
 void YalnView::createUniformBuffers()
 {
-    vk::DeviceSize bufferSize = sizeof(glm::mat4) * 3; // model + view + proj
+    vk::DeviceSize bufferSize = sizeof(UniformBufferObject); // proj_view_mat only
 
     m_uniformBuffers.clear();
     m_uniformBuffersMemory.clear();
@@ -839,7 +857,7 @@ void YalnView::createDescriptorPool()
     }};
 
     vk::DescriptorPoolCreateInfo poolInfo(
-        {},
+        vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
         static_cast<uint32_t>(m_swapChainImages.size()),
         static_cast<uint32_t>(poolSizes.size()),
         poolSizes.data()
@@ -909,9 +927,14 @@ void YalnView::createSyncObjects()
     vk::SemaphoreCreateInfo semaphoreInfo{};
     vk::FenceCreateInfo fenceInfo(vk::FenceCreateFlagBits::eSignaled);
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    // Create semaphores per swapchain image to avoid semaphore reuse issues
+    for (size_t i = 0; i < m_swapChainImages.size(); i++) {
         m_imageAvailableSemaphores.emplace_back(m_device, semaphoreInfo);
         m_renderFinishedSemaphores.emplace_back(m_device, semaphoreInfo);
+    }
+
+    // Fences only need MAX_FRAMES_IN_FLIGHT
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         m_inFlightFences.emplace_back(m_device, fenceInfo);
     }
 }
@@ -922,13 +945,18 @@ void YalnView::drawFrame()
 {
     static int frameCount = 0;
     frameCount++;
-    if (frameCount <= 3) {
-        std::cerr << "[DEBUG] drawFrame called, frame #" << frameCount << std::endl;
-    }
     
     // 延迟加载：网格未准备好则跳过渲染
     if (!isMeshReady()) {
+        if (frameCount <= 3) {
+            std::cerr << "[DEBUG] Mesh not ready: meshes=" << m_meshes.size() 
+                      << ", buffers=" << m_meshBuffers.size() << std::endl;
+        }
         return;
+    }
+    
+    if (frameCount <= 3) {
+        std::cerr << "[DEBUG] Rendering " << m_meshes.size() << " meshes" << std::endl;
     }
 
     auto& fence = m_inFlightFences[m_currentFrame];
@@ -939,7 +967,7 @@ void YalnView::drawFrame()
         return;
     }
 
-    // 获取交换链图像
+    // 获取交换链图像 - 使用帧索引的信号量用于获取
     auto [acquireResult, imageIndex] = m_swapChain.acquireNextImage(
         std::numeric_limits<uint64_t>::max(),
         *m_imageAvailableSemaphores[m_currentFrame],
@@ -952,24 +980,17 @@ void YalnView::drawFrame()
         return;
     }
 
-    // 更新 uniform buffer
-    //static auto startTime = std::chrono::high_resolution_clock::now();
-    //auto currentTime = std::chrono::high_resolution_clock::now();
-    //float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
+    // 更新 uniform buffer（仅投影-视图矩阵）
     UniformBufferObject ubo{};
-    // 与 YalnEngineC 保持一致 - 绕 Z 轴旋转
-    //ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    // ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    // float aspect = static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height);
-    // ubo.proj = glm::perspective(glm::radians(45.0f), aspect, 0.1f, 10.0f);
-    // ubo.proj[1][1] *= -1; // Vulkan Y轴向下
-    ubo.model = glm::identity<glm::mat4>();
     ubo.proj_view_mat = m_camera_ptr->getMatrix();
+    
     if (frameCount <= 3) {
-        std::cerr << "[DEBUG] UniformBufferObject size: " << sizeof(UniformBufferObject) << std::endl;
-        std::cerr << "[DEBUG] mat4 size: " << sizeof(glm::mat4) << std::endl;
-        std::cerr << "[DEBUG] ubo.model[0]: " << ubo.model[0][0] << ", " << ubo.model[0][1] << ", " << ubo.model[0][2] << ", " << ubo.model[0][3] << std::endl;
+        std::cerr << "[DEBUG] proj_view_mat[0]: " << ubo.proj_view_mat[0][0] << ", " 
+                  << ubo.proj_view_mat[0][1] << ", " << ubo.proj_view_mat[0][2] << ", " 
+                  << ubo.proj_view_mat[0][3] << std::endl;
+        std::cerr << "[DEBUG] proj_view_mat[1]: " << ubo.proj_view_mat[1][0] << ", " 
+                  << ubo.proj_view_mat[1][1] << ", " << ubo.proj_view_mat[1][2] << ", " 
+                  << ubo.proj_view_mat[1][3] << std::endl;
     }
 
     void* data = m_uniformBuffersMemory[imageIndex].mapMemory(0, sizeof(ubo));
@@ -1005,10 +1026,6 @@ void YalnView::drawFrame()
     vk::Rect2D scissor({0, 0}, m_swapChainExtent);
     m_commandBuffers[imageIndex].setScissor(0, scissor);
 
-    m_commandBuffers[imageIndex].bindVertexBuffers(0, {*m_vertexBuffer}, {0});
-
-    m_commandBuffers[imageIndex].bindIndexBuffer(*m_indexBuffer, 0, vk::IndexType::eUint32);
-
     m_commandBuffers[imageIndex].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         *m_pipelineLayout,
@@ -1016,33 +1033,60 @@ void YalnView::drawFrame()
         {}
     );
 
-    // 绘制网格（索引数量由m_indexCount指定）
-    m_commandBuffers[imageIndex].drawIndexed(m_indexCount, 1, 0, 0, 0);
+    // 绘制所有网格
+    for (size_t i = 0; i < m_meshBuffers.size(); i++) {
+        const MeshBuffer& mb = m_meshBuffers[i];
+        YalnMesh* mesh = m_meshes[i];
+
+        // 绑定当前网格的缓冲区
+        m_commandBuffers[imageIndex].bindVertexBuffers(0, {*mb.vertexBuffer}, {0});
+        m_commandBuffers[imageIndex].bindIndexBuffer(*mb.indexBuffer, 0, vk::IndexType::eUint32);
+
+        // Push Constants：传递模型矩阵
+        glm::mat4 modelMatrix = mesh->getModelMatrix();
+        constexpr uint32_t size = sizeof(glm::mat4);
+        m_commandBuffers[imageIndex].pushConstants(
+            *m_pipelineLayout,
+            vk::ShaderStageFlags{vk::ShaderStageFlagBits::eVertex},
+            0u,
+            vk::ArrayProxy<const float>(size / sizeof(float), &modelMatrix[0][0])
+        );
+
+        // 绘制当前网格
+        m_commandBuffers[imageIndex].drawIndexed(mb.indexCount, 1, 0, 0, 0);
+    }
 
     m_commandBuffers[imageIndex].endRenderPass();
     m_commandBuffers[imageIndex].end();
 
+    // Check if a previous frame is using this image (now using fence with imageIndex)
+    if (m_imagesInFlight[imageIndex] != VK_NULL_HANDLE) {
+        std::array<vk::Fence, 1> fences = {m_imagesInFlight[imageIndex]};
+        m_device.waitForFences(fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
+    }
+    m_imagesInFlight[imageIndex] = *fence;
+
     // 重置 fence
     m_device.resetFences({*fence});
 
-    // 提交命令
+    // 提交命令 - 使用 imageIndex 索引的信号量
     std::array<vk::PipelineStageFlags, 1> waitStages = {
         vk::PipelineStageFlagBits::eColorAttachmentOutput
     };
 
     vk::SubmitInfo submitInfo(
-        1, &*m_imageAvailableSemaphores[m_currentFrame],
+        1, &*m_imageAvailableSemaphores[imageIndex],
         waitStages.data(),
         1, &*m_commandBuffers[imageIndex],
-        1, &*m_renderFinishedSemaphores[m_currentFrame]
+        1, &*m_renderFinishedSemaphores[imageIndex]
     );
 
     m_graphicsQueue.submit(submitInfo, *fence);
 
-    // 呈现
+    // 呈现 - 使用 imageIndex 索引的信号量
     std::array<vk::SwapchainKHR, 1> swapChains = {*m_swapChain};
     vk::PresentInfoKHR presentInfo(
-        1, &*m_renderFinishedSemaphores[m_currentFrame],
+        1, &*m_renderFinishedSemaphores[imageIndex],
         static_cast<uint32_t>(swapChains.size()),
         swapChains.data(),
         &imageIndex

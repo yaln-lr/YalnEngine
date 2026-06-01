@@ -3,6 +3,8 @@
 #define YALN_MESH_H
 
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/glm.hpp>
 #include <string>
 #include <vector>
 #include "yalnvertex.h"
@@ -27,6 +29,22 @@ public:
     // 获取顶点和索引数据
     const std::vector<YalnVertexPC>& getVertices() const { return vertices; }
     const std::vector<uint32_t>& getIndices() const { return indices; }
+    
+    // 变换参数
+    glm::vec3 m_position{0.0f, 0.0f, 0.0f};  // 位置偏移
+    glm::vec3 m_rotation{0.0f, 0.0f, 0.0f};   // 旋转角度（弧度）
+    glm::vec3 m_scale{1.0f, 1.0f, 1.0f};      // 缩放
+    
+    // 获取模型矩阵
+    glm::mat4 getModelMatrix() const {
+        glm::mat4 model = glm::identity<glm::mat4>();
+        model = glm::translate(model, m_position);
+        model = glm::rotate(model, m_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::rotate(model, m_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::rotate(model, m_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, m_scale);
+        return model;
+    }
     
 protected:
     std::vector<YalnVertexPC> vertices;

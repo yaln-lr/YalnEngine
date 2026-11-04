@@ -1,0 +1,40 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "调试 yalnviewer (gdb)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/mingw/viewer/yalnviewer.exe",
+            "args": [],
+            "stopAtEntry": false,
+            // 运行目录设为 viewer/，正好让代码里的 ../shaders/*.spv 命中 build/mingw/shaders
+            "cwd": "${workspaceFolder}/build/mingw/viewer",
+            "environment": [
+                // Debug 构建强制启用校验层，layer 只在 SDK Bin 里，必须显式指定
+                { "name": "VK_LAYER_PATH", "value": "D:/VulkanSDK/1.4.341.1/Bin" },
+                {
+                    // ⚠ 顺序不可随意调整：D:/msys64/ucrt64/bin 必须排在 D:/QT6/.../bin 之前。
+                    //   Qt 的 bin 里带了一套 GCC 13.1 的 libstdc++-6.dll，
+                    //   本项目用 GCC 15.2 编译，加载错版本会报 0xC0000139 (ENTRYPOINT_NOT_FOUND)。
+                    "name": "PATH",
+                    "value": "D:/msys64/ucrt64/bin;${workspaceFolder}/build/mingw/core;D:/QT6/6.11.0/mingw_64/bin;D:/VulkanSDK/1.4.341.1/Bin;${env:PATH}"
+                }
+            ],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "miDebuggerPath": "D:/msys64/ucrt64/bin/gdb.exe",
+            "targetArchitecture": "x64",
+            "setupCommands": [
+                { "text": "-enable-pretty-printing", "description": "启用 gdb pretty printer" },
+                { "text": "-gdb-set breakpoint pending on", "description": "允许 DLL 加载前设置挂起断点" }
+            ],
+            "logging": {
+                "moduleLoad": false,
+                "programOutput": true,
+                "trace": false
+            },
+            "preLaunchTask": "构建：全部工程 (CMake)"
+        }
+    ]
+}

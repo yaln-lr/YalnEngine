@@ -3,197 +3,108 @@
 
 #include <vulkan/vulkan.hpp>
 #include <vulkan/vulkan_raii.hpp>
-#include <optional>
-#include <vector>
+
 #include <string>
-#include <fstream>
-#include <iostream>
-#include <chrono>
+#include <vector>
+
 #include "global_type.h"
 
 #include "yalncamera.h"
-#include "YalnMesh.h"
-constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+#include "yalnmesh.h"
 
+// 组合的各个子系统（每个只负责一件事）
+#include "yalnvulkaninstance.h"
+#include "yalnsurface.h"
+#include "yalndevice.h"
+#include "yalnswapchain.h"
+#include "yalnrenderpass.h"
+#include "yalngraphicspipeline.h"
+#include "yalnscene.h"
+#include "yalnrenderer.h"
+
+constexpr uint32_t MAX_FRAMES_IN_FLIGHT = YALN_MAX_FRAMES_IN_FLIGHT;
+
+// ============================================================================
+//  YalnView
+//  职责（重构后）：仅做「编排 + 对外门面」。
+//    - 按顺序驱动各子系统初始化
+//    - 向上层（QtViewer / main）暴露简洁 API
+//  实例、设备、交换链、渲染通道、管线、场景、渲染循环分别由
+//  YalnVulkanInstance / YalnDevice / YalnSwapChain / YalnRenderPass /
+//  YalnGraphicsPipeline / YalnScene / YalnRenderer 承担。
+// ============================================================================
 class YALN_CORE_EXPORT YalnView
 {
 public:
     YalnView();
     virtual ~YalnView();
-    bool initVulkan(const char* appname);
 
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily;
-        std::optional<uint32_t> presentFamily;
-        bool isComplete() const {
-            return graphicsFamily.has_value() && presentFamily.has_value();
-        }
-    };
+    YalnView(const YalnView&)            = delete;
+    YalnView& operator=(const YalnView&) = delete;
 
-    struct SwapChainSupportDetails {
-        vk::SurfaceCapabilitiesKHR capabilities;
-        std::vector<vk::SurfaceFormatKHR>  formats;
-        std::vector<vk::PresentModeKHR> presentModes;
-    };
+    // 按顺序初始化全部 Vulkan 子系统
+    bool initVulkan(const char* appName);
 
-    static VKAPI_ATTR uint32_t VKAPI_CALL debugMessageFunc(
-        vk::DebugUtilsMessageSeverityFlagBitsEXT       /*messageSeverity*/,
-        vk::DebugUtilsMessageTypeFlagsEXT              /*messageTypes*/,
-        vk::DebugUtilsMessengerCallbackDataEXT const * pCallbackData,
-        void * /*pUserData*/
-    )
-    {
-        std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
-        return false;
-    }
-
-    static constexpr vk::DebugUtilsMessengerCreateInfoEXT populateDebugMessengerCreateInfo() {
-        constexpr vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
-            vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose |
-            vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-            vk::DebugUtilsMessageSeverityFlagBitsEXT::eError
-        );
-        constexpr vk::DebugUtilsMessageTypeFlagsEXT    messageTypeFlags(
-            vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-            vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation
-        );
-        return { {}, severityFlags, messageTypeFlags, &debugMessageFunc };
-    }
-
-    // 输出硬件能力信息的函数
     void printCapacity();
-    void setCameta(YalnCameraPtr camera)
+
+    // 相机（保留旧拼写 setCameta 以兼容现有调用）
+    void          setCameta(YalnCameraPtr camera);
+    YalnCameraPtr camera() const          { return m_camera_ptr; }
+    YalnCameraPtr getCamera() const       { return m_camera_ptr; }
+
+    // 场景
+    void addMesh(YalnMesh* mesh);
+    void clearMeshes();
+    bool isMeshReady() const;
+
+    // 着色器路径（默认为运行目录下的 ../shaders/*.spv）
+    void setShaderPaths(const std::string& vertPath, const std::string& fragPath)
     {
-        m_camera_ptr = camera;
-    };
+        m_vertShaderPath = vertPath;
+        m_fragShaderPath = fragPath;
+    }
+
+    // 子系统访问（供平台层创建表面 / 查询尺寸）
+    const YalnVulkanInstance& vulkanInstance() const { return m_instance; }
+    YalnSurface&              surface()              { return m_surface; }
+    const YalnDevice&         device()         const { return m_device; }
+    const YalnSwapChain&      swapChain()      const { return m_swapChain; }
+    vk::Extent2D              swapChainExtent() const { return m_swapChain.extent(); }
+
+    bool isInitialized() const { return m_initialized; }
 
 protected:
-    // 由子类实现：创建窗口表面
+    // 由平台层实现：使用自己的窗口句柄创建表面并写入 surface()
     virtual bool createSurface() = 0;
 
-    // 由子类重写以处理调试消息
-    virtual bool debugMessage(vk::DebugUtilsMessageSeverityFlagBitsEXT,
-                              vk::DebugUtilsMessageTypeFlagsEXT,
-                              vk::DebugUtilsMessengerCallbackDataEXT const*) { return true; }
-
-    // 获取需要的实例级扩展（子类可重写以添加平台特定扩展）
+    // 实例级扩展（默认含 surface 扩展与校验层调试扩展）
     virtual std::vector<const char*> getRequiredInstanceExtensions();
+
+    // 帧循环与交换链重建（由平台层在定时器/尺寸变化时驱动）
     virtual void recreateSwapChain();
-    // 初始化流程
-    bool createInstance(const char* applicationName);
-    bool checkValidationLayerSupport() const;
-    void setupDebugMessenger();
-    bool selectPhysicalDevice();
-    bool isDeviceSuitable(vk::raii::PhysicalDevice& device);
-    bool checkDeviceExtensionSupport(vk::raii::PhysicalDevice& device);
-    QueueFamilyIndices findQueueFamilies(vk::raii::PhysicalDevice& device);
-    SwapChainSupportDetails querySwapChainSupport(vk::raii::PhysicalDevice& device);
-    bool createLogicalDevice();
-    void createSwapChain();
-    void createImageViews();
-    void createRenderPass();
-    void createDescriptorSetLayout();
-    void createGraphicsPipeline();
-    vk::raii::ShaderModule createShaderModule(const std::vector<char>& code);
-    std::vector<char> readFile(const std::string& filename);
-    void createFramebuffers();
-    void createCommandPool();
-    void createVertexBuffer();  // 保留兼容接口，内部调用setMesh
-    void createIndexBuffer();    // 保留兼容接口，内部调用setMesh
-    
-    // 延迟加载：设置网格后自动创建/更新缓冲区
-public:
-    void addMesh(YalnMesh* mesh);  // 添加一个网格
-    void clearMeshes();  // 清空所有网格
-    bool isMeshReady() const { return !m_meshes.empty() && m_meshes.size() == m_meshBuffers.size(); }
-protected:
-    void createMeshBuffers();  // 延迟创建缓冲区
-    void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage,
-                      vk::MemoryPropertyFlags properties,
-                      vk::raii::Buffer& buffer, vk::raii::DeviceMemory& memory);
-    void copyBuffer(vk::Buffer srcBuffer, vk::Buffer dstBuffer, vk::DeviceSize size);
-    uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
-    void createUniformBuffers();
-    void createDescriptorPool();
-    void createDescriptorSets();
-    void createCommandBuffers();
-    void createSyncObjects();
-    void drawFrame();
-    void cleanup();
-
-    // 交换链辅助
-    vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
-    vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes);
-    vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
-
-protected:
-    vk::raii::Context m_context;
-    vk::raii::Instance m_instance{ nullptr };
-    vk::raii::DebugUtilsMessengerEXT m_debugMessenger{ nullptr };
-    vk::raii::SurfaceKHR m_surface{ nullptr };
-    vk::raii::PhysicalDevice m_physicalDevice{ nullptr };
-    vk::raii::Device m_device{ nullptr };
-    vk::raii::Queue m_graphicsQueue{ nullptr };
-    vk::raii::Queue m_presentQueue{ nullptr };
-
-    VkSurfaceKHR m_surfaceHandle = VK_NULL_HANDLE; // 原始句柄，用于C API查询
-
-    vk::raii::SwapchainKHR m_swapChain{ nullptr };
-    std::vector<vk::Image> m_swapChainImages;
-    vk::Format m_swapChainImageFormat{};
-    vk::Extent2D m_swapChainExtent{};
-    std::vector<vk::raii::ImageView> m_swapChainImageViews;
-
-    vk::raii::RenderPass m_renderPass{ nullptr };
-    vk::raii::DescriptorSetLayout m_descriptorSetLayout{ nullptr };
-    vk::raii::PipelineLayout m_pipelineLayout{ nullptr };
-    vk::raii::Pipeline m_graphicsPipeline{ nullptr };
-    std::vector<vk::raii::Framebuffer> m_swapChainFramebuffers;
-
-    vk::raii::CommandPool m_commandPool{ nullptr };
-
-    vk::raii::Buffer m_vertexBuffer{ nullptr };
-    vk::raii::DeviceMemory m_vertexBufferMemory{ nullptr };
-    vk::raii::Buffer m_indexBuffer{ nullptr };
-    vk::raii::DeviceMemory m_indexBufferMemory{ nullptr };
-    std::vector<vk::raii::Buffer> m_uniformBuffers;
-    std::vector<vk::raii::DeviceMemory> m_uniformBuffersMemory;
-
-    vk::raii::DescriptorPool m_descriptorPool{ nullptr };
-    std::vector<vk::raii::DescriptorSet> m_descriptorSets;
-
-    std::vector<vk::raii::CommandBuffer> m_commandBuffers;
-
-    std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
-    std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
-    std::vector<vk::raii::Fence> m_inFlightFences;
-    std::vector<vk::Fence> m_imagesInFlight;
-
-    uint32_t m_currentFrame = 0;
-    bool m_framebufferResized = false;
-    YalnCameraPtr m_camera_ptr = nullptr;
-    
-    // 延迟加载的网格数据（支持多个网格）
-    std::vector<YalnMesh*> m_meshes;
-    struct MeshBuffer {
-        vk::raii::Buffer vertexBuffer{ nullptr };
-        vk::raii::DeviceMemory vertexBufferMemory{ nullptr };
-        vk::raii::Buffer indexBuffer{ nullptr };
-        vk::raii::DeviceMemory indexBufferMemory{ nullptr };
-        uint32_t indexCount = 0;
-    };
-    std::vector<MeshBuffer> m_meshBuffers;
+    void         drawFrame();
 
 private:
-    const std::vector<const char*> m_validationLayers = {
-        "VK_LAYER_KHRONOS_validation"
-    };
-    const std::vector<const char*> m_deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
+    bool createVulkanInstance(const char* appName);
+    void createMeshBuffers();
 
-    
+    // ------------------------------------------------------------------
+    // 成员声明顺序 = 创建顺序；析构逆序，保证 instance 最后销毁。
+    // ------------------------------------------------------------------
+    YalnVulkanInstance  m_instance;
+    YalnSurface         m_surface;
+    YalnDevice          m_device;
+    YalnSwapChain       m_swapChain;
+    YalnRenderPass      m_renderPass;
+    YalnGraphicsPipeline m_pipeline;
+    YalnRenderer        m_renderer;
+    YalnScene           m_scene;
+
+    YalnCameraPtr m_camera_ptr = nullptr;
+    bool          m_initialized = false;
+
+    std::string m_vertShaderPath = "../shaders/shader.vert.spv";
+    std::string m_fragShaderPath = "../shaders/shader.frag.spv";
 };
 
-#endif //YALN_VIEW_H
+#endif // YALN_VIEW_H

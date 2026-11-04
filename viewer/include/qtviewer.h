@@ -33,9 +33,8 @@ public slots:
     void onFrameTimeout();
 
 protected:
-    // YalnView 抽象方法实现
+    // YalnView 抽象方法实现：用 Qt 的原生窗口句柄创建表面
     virtual bool createSurface() override;
-    virtual std::vector<const char*> getRequiredInstanceExtensions() override;
 
     // Qt 事件处理
     void keyPressEvent(QKeyEvent* event) override;
@@ -57,7 +56,7 @@ public:
     bool isAutoRotate() const { return m_autoRotate; }
     void setAutoRotateSpeed(float speed) { m_autoRotateSpeed = speed; }
     float getAutoRotateSpeed() const { return m_autoRotateSpeed; }
-    YalnCameraPtr getCamera() const { return m_camera_ptr; }
+    YalnCameraPtr getCamera() const { return camera(); }
     void addMesh(YalnMesh* mesh) { YalnView::addMesh(mesh); }
 
 private:

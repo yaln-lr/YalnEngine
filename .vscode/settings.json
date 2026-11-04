@@ -1,0 +1,48 @@
+{
+    // ==================== CMake Tools ====================
+    "cmake.cmakePath": "D:/cmake/bin/cmake.exe",
+    "cmake.generator": "Ninja",
+    "cmake.buildDirectory": "${workspaceFolder}/build/mingw",
+    "cmake.installPrefix": "${workspaceFolder}/install",
+    "cmake.configureOnOpen": true,
+    "cmake.configureSettings": {
+        "CMAKE_C_COMPILER": "D:/msys64/ucrt64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "D:/msys64/ucrt64/bin/g++.exe",
+        "CMAKE_MAKE_PROGRAM": "D:/QT6/Tools/Ninja/ninja.exe",
+        // Qt6 位置（find_package(Qt6) 用）
+        "CMAKE_PREFIX_PATH": "D:/QT6/6.11.0/mingw_64",
+        // 让 find_program(glslc) 找到 SDK 里的 glslc.exe
+        "CMAKE_PROGRAM_PATH": "D:/VulkanSDK/1.4.341.1/Bin",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "CMAKE_BUILD_TYPE": "Debug"
+    },
+
+    // ==================== C/C++ IntelliSense ====================
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/mingw/compile_commands.json",
+    "C_Cpp.default.compilerPath": "D:/msys64/ucrt64/bin/g++.exe",
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.intelliSenseMode": "windows-gcc-x64",
+
+    // ==================== 文件关联 ====================
+    "files.associations": {
+        "*.vert": "glsl",
+        "*.frag": "glsl",
+        "*.glsl": "glsl"
+    },
+
+    // ==================== 集成终端环境变量 ====================
+    "terminal.integrated.env.windows": {
+        "VULKAN_SDK": "D:/VulkanSDK/1.4.341.1",
+        // Debug 构建会强制启用校验层，但本机未把 layer 注册到系统，需显式指定
+        "VK_LAYER_PATH": "D:/VulkanSDK/1.4.341.1/Bin",
+        // GLM 头文件在 Vulkan SDK 的 Include 下，注入给编译器
+        "CPLUS_INCLUDE_PATH": "D:/VulkanSDK/1.4.341.1/Include",
+        "C_INCLUDE_PATH": "D:/VulkanSDK/1.4.341.1/Include",
+        // 让 ld 找到 libvulkan-1.dll.a（裸 -lvulkan-1 需要）
+        "LIBRARY_PATH": "D:/msys64/ucrt64/lib",
+        // ⚠ D:/msys64/ucrt64/bin 必须排在 D:/QT6/.../bin 之前：
+        //   Qt 的 bin 里带了一套 GCC 13.1 的 libstdc++-6.dll，
+        //   本项目用 GCC 15.2 编译，加载错版本会报 0xC0000139
+        "PATH": "D:/msys64/ucrt64/bin;${workspaceFolder}/build/mingw/core;D:/QT6/6.11.0/mingw_64/bin;D:/VulkanSDK/1.4.341.1/Bin;D:/cmake/bin;${env:PATH}"
+    }
+}

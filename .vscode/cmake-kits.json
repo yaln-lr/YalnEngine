@@ -1,0 +1,26 @@
+[
+    {
+        "name": "MinGW-w64 UCRT64 (GCC 15.2.0)",
+        "compilers": {
+            "C": "D:/msys64/ucrt64/bin/gcc.exe",
+            "CXX": "D:/msys64/ucrt64/bin/g++.exe"
+        },
+        "preferredGenerator": {
+            "name": "Ninja"
+        },
+        "cmakeSettings": {
+            "CMAKE_PREFIX_PATH": "D:/QT6/6.11.0/mingw_64",
+            "CMAKE_PROGRAM_PATH": "D:/VulkanSDK/1.4.341.1/Bin"
+        }
+    },
+    {
+        "name": "Qt 自带 MinGW (GCC 13.1.0)",
+        "compilers": {
+            "C": "D:/QT6/Tools/mingw1310_64/bin/gcc.exe",
+            "CXX": "D:/QT6/Tools/mingw1310_64/bin/g++.exe"
+        },
+        "preferredGenerator": {
+            "name": "Ninja"
+        }
+    }
+]

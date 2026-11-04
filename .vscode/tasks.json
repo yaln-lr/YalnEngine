@@ -1,0 +1,125 @@
+{
+    "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "buildTarget",
+            "type": "pickString",
+            "description": "选择要构建的 CMake 目标",
+            "options": [
+                "yalnviewer",
+                "yaln_core",
+                "CompileShaders",
+                "compile_shaders",
+                "all",
+                "clean"
+            ],
+            "default": "yalnviewer"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "构建：全部工程 (CMake)",
+            "type": "shell",
+            "command": "D:/cmake/bin/cmake.exe",
+            "args": [
+                "--build", "${workspaceFolder}/build/mingw"
+            ],
+            "options": {
+                "env": {
+                    "VULKAN_SDK": "D:/VulkanSDK/1.4.341.1",
+                    "VK_LAYER_PATH": "D:/VulkanSDK/1.4.341.1/Bin",
+                    "CPLUS_INCLUDE_PATH": "D:/VulkanSDK/1.4.341.1/Include",
+                    "C_INCLUDE_PATH": "D:/VulkanSDK/1.4.341.1/Include",
+                    "LIBRARY_PATH": "D:/msys64/ucrt64/lib",
+                    "PATH": "D:/msys64/ucrt64/bin;${workspaceFolder}/build/mingw/core;D:/QT6/6.11.0/mingw_64/bin;D:/VulkanSDK/1.4.341.1/Bin;D:/cmake/bin;${env:PATH}"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": [ "$gcc" ]
+        },
+        {
+            "label": "构建：单个目标 (CMake)",
+            "type": "shell",
+            "command": "D:/cmake/bin/cmake.exe",
+            "args": [
+                "--build", "${workspaceFolder}/build/mingw",
+                "--target", "${input:buildTarget}"
+            ],
+            "options": {
+                "env": {
+                    "VULKAN_SDK": "D:/VulkanSDK/1.4.341.1",
+                    "VK_LAYER_PATH": "D:/VulkanSDK/1.4.341.1/Bin",
+                    "CPLUS_INCLUDE_PATH": "D:/VulkanSDK/1.4.341.1/Include",
+                    "C_INCLUDE_PATH": "D:/VulkanSDK/1.4.341.1/Include",
+                    "LIBRARY_PATH": "D:/msys64/ucrt64/lib",
+                    "PATH": "D:/msys64/ucrt64/bin;${workspaceFolder}/build/mingw/core;D:/QT6/6.11.0/mingw_64/bin;D:/VulkanSDK/1.4.341.1/Bin;D:/cmake/bin;${env:PATH}"
+                }
+            },
+            "group": "build",
+            "problemMatcher": [ "$gcc" ]
+        },
+        {
+            "label": "安装 (CMake Install)",
+            "type": "shell",
+            "command": "D:/cmake/bin/cmake.exe",
+            "args": [
+                "--install", "${workspaceFolder}/build/mingw",
+                // 原 CMakeLists 未设置安装前缀，默认会装到 C:/Program Files (x86)/...，
+                // 显式指定到项目内的 install/ 目录
+                "--prefix", "${workspaceFolder}/install"
+            ],
+            "dependsOn": [ "构建：全部工程 (CMake)" ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
+        },
+        {
+            "label": "清理 (CMake)",
+            "type": "shell",
+            "command": "D:/cmake/bin/cmake.exe",
+            "args": [
+                "--build", "${workspaceFolder}/build/mingw",
+                "--target", "clean"
+            ],
+            "options": {
+                "env": {
+                    "VULKAN_SDK": "D:/VulkanSDK/1.4.341.1"
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "部署 Qt 运行库 (windeployqt)",
+            "type": "shell",
+            "command": "D:/QT6/6.11.0/mingw_64/bin/windeployqt.exe",
+            "args": [
+                "--no-translations",
+                "--no-system-d3d-compiler",
+                "--no-compiler-runtime",
+                "${workspaceFolder}/build/mingw/viewer/yalnviewer.exe"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "D:/msys64/ucrt64/bin;D:/QT6/6.11.0/mingw_64/bin;${env:PATH}"
+                }
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "运行 yalnviewer",
+            "type": "process",
+            "command": "${workspaceFolder}/build/mingw/viewer/yalnviewer.exe",
+            "options": {
+                "cwd": "${workspaceFolder}/build/mingw/viewer",
+                "env": {
+                    // ⚠ msys64 必须排在 Qt 的 bin 之前，详见 launch.json 里的说明
+                    "PATH": "D:/msys64/ucrt64/bin;${workspaceFolder}/build/mingw/core;D:/QT6/6.11.0/mingw_64/bin;D:/VulkanSDK/1.4.341.1/Bin;D:/cmake/bin;${env:PATH}",
+                    "VK_LAYER_PATH": "D:/VulkanSDK/1.4.341.1/Bin"
+                }
+            },
+            "problemMatcher": []
+        }
+    ]
+}

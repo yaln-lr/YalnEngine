@@ -44,23 +44,19 @@ QtViewer::~QtViewer()
     }
 }
 
+// 平台层职责：只负责创建表面并交给 YalnSurface，其余交给 YalnView 编排
 bool QtViewer::createSurface()
 {
 #ifdef _WIN32
-    // 使用 Vulkan HPP 接口创建 Win32 表面
     vk::Win32SurfaceCreateInfoKHR createInfo(
         vk::Win32SurfaceCreateFlagsKHR{},  // flags
         GetModuleHandle(nullptr),          // hinstance
-        (HWND)winId()                       // hwnd
+        (HWND)winId()                      // hwnd
     );
 
     try {
-        // 使用 vk::raii 方式创建表面
-        m_surface = m_instance.createWin32SurfaceKHR(createInfo);
-        
-        // 获取原始句柄用于某些查询
-        VkSurfaceKHR rawSurface = static_cast<VkSurfaceKHR>(*m_surface);
-        m_surfaceHandle = rawSurface;
+        auto vulkanSurface = vulkanInstance().handle().createWin32SurfaceKHR(createInfo);
+        surface().set(std::move(vulkanSurface));
         return true;
     }
     catch (const vk::SystemError& e) {
@@ -79,8 +75,8 @@ bool QtViewer::createSurface()
     );
 
     try {
-        m_surface = m_instance.createMacOSSurfaceMVK(createInfo);
-        m_surfaceHandle = static_cast<VkSurfaceKHR>(*m_surface);
+        auto vulkanSurface = vulkanInstance().handle().createMacOSSurfaceMVK(createInfo);
+        surface().set(std::move(vulkanSurface));
         return true;
     }
     catch (const vk::SystemError& e) {
@@ -94,25 +90,9 @@ bool QtViewer::createSurface()
 #endif
 }
 
-std::vector<const char*> QtViewer::getRequiredInstanceExtensions()
-{
-    // 调用基类方法获取验证层等扩展
-    auto extensions = YalnView::getRequiredInstanceExtensions();
-
-#ifdef _WIN32
-    extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-#elif defined(__linux__)
-    extensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-#elif defined(__APPLE__)
-    extensions.push_back(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
-#endif
-
-    return extensions;
-}
-
 bool QtViewer::initialize(const char* appName)
 {
-    // 调用基类初始化
+    // 调用基类初始化（内部按顺序驱动各子系统）
     if (!initVulkan(appName)) {
         emit vulkanInitialized(false);
         return false;
@@ -139,19 +119,19 @@ void QtViewer::startRenderLoop()
 void QtViewer::onFrameTimeout()
 {
     // 自动旋转
-    if (m_autoRotate && m_camera_ptr) {
-        // 相机自动旋转
-        glm::vec3 pos = m_camera_ptr->getPosition();
+    if (m_autoRotate && camera()) {
+        YalnCameraPtr cam = camera();
+        glm::vec3 pos = cam->getPosition();
         float angle = m_autoRotateSpeed * 0.016f;
-        
+
         // 绕 Y 轴旋转
         float cosA = glm::cos(angle);
         float sinA = glm::sin(angle);
         float x = pos.x * cosA - pos.z * sinA;
         float z = pos.x * sinA + pos.z * cosA;
         pos = glm::vec3(x, pos.y, z);
-        
-        m_camera_ptr->setPosition(pos);
+
+        cam->setPosition(pos);
     }
 
     // 绘制帧
@@ -177,12 +157,16 @@ void QtViewer::resizeEvent(QResizeEvent* event)
     m_height = size.height();
 
     // 如果 Vulkan 已初始化，重新创建交换链
-    if (m_swapChain != nullptr) {
+    if (isInitialized()) {
         recreateSwapChain();
+
         // 使用交换链的实际大小更新相机宽高比
-        if (m_camera_ptr) {
-            float aspect = static_cast<float>(m_swapChainExtent.width) / static_cast<float>(m_swapChainExtent.height);
-            m_camera_ptr->setAspectRatio(aspect);
+        if (camera()) {
+            const vk::Extent2D extent = swapChainExtent();
+            if (extent.height != 0) {
+                float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
+                camera()->setAspectRatio(aspect);
+            }
         }
     }
 }
@@ -201,10 +185,10 @@ void QtViewer::keyReleaseEvent(QKeyEvent* event)
 
 void QtViewer::handleKeyInput(int key, bool pressed)
 {
-    if (!pressed || !m_camera_ptr) return;
+    if (!pressed || !camera()) return;
 
     const float moveSpeed = 0.2f;
-    glm::vec3 pos = m_camera_ptr->getPosition();
+    glm::vec3 pos = camera()->getPosition();
 
     switch (key) {
         // WASD：相机位置移动
@@ -251,7 +235,7 @@ void QtViewer::handleKeyInput(int key, bool pressed)
             return;
     }
 
-    m_camera_ptr->setPosition(pos);
+    camera()->setPosition(pos);
 }
 
 void QtViewer::mousePressEvent(QMouseEvent* event)
@@ -273,15 +257,15 @@ void QtViewer::mouseReleaseEvent(QMouseEvent* event)
 
 void QtViewer::mouseMoveEvent(QMouseEvent* event)
 {
-    if (!m_isMousePressed || !m_camera_ptr) return;
+    if (!m_isMousePressed || !camera()) return;
 
     float currentX = static_cast<float>(event->position().x());
     float currentY = static_cast<float>(event->position().y());
     float deltaX = currentX - m_lastMouseX;
     float deltaY = currentY - m_lastMouseY;
 
-    glm::vec3 pos = m_camera_ptr->getPosition();
-    glm::vec3 target = m_camera_ptr->getTarget();
+    glm::vec3 pos = camera()->getPosition();
+    glm::vec3 target = camera()->getTarget();
 
     if (m_mouseButton == Qt::LeftButton) {
         // 左键：旋转相机视角（绕目标点）
@@ -291,21 +275,21 @@ void QtViewer::mouseMoveEvent(QMouseEvent* event)
         // 计算当前角度
         glm::vec3 offset = pos - target;
         float radius = glm::length(offset);
-        
+
         // 计算新的方位角和仰角
         float phi = glm::atan(offset.z, offset.x) + yaw;
         float theta = glm::acos(offset.y / radius) - pitch;
-        
+
         // 限制仰角
         theta = glm::clamp(theta, 0.1f, glm::pi<float>() - 0.1f);
-        
+
         // 计算新位置
         offset.x = radius * glm::sin(theta) * glm::cos(phi);
         offset.y = radius * glm::cos(theta);
         offset.z = radius * glm::sin(theta) * glm::sin(phi);
-        
+
         pos = target + offset;
-        m_camera_ptr->setPosition(pos);
+        camera()->setPosition(pos);
 
     } else if (m_mouseButton == Qt::RightButton) {
         // 右键：平移相机（沿视平面移动）
@@ -318,8 +302,8 @@ void QtViewer::mouseMoveEvent(QMouseEvent* event)
         target -= right * deltaX * m_panSensitivity * 10.0f;
         target += up * deltaY * m_panSensitivity * 10.0f;
 
-        m_camera_ptr->setPosition(pos);
-        m_camera_ptr->setTarget(target);
+        camera()->setPosition(pos);
+        camera()->setTarget(target);
     }
 
     m_lastMouseX = currentX;
@@ -329,28 +313,28 @@ void QtViewer::mouseMoveEvent(QMouseEvent* event)
 
 void QtViewer::wheelEvent(QWheelEvent* event)
 {
-    if (!m_camera_ptr) {
+    if (!camera()) {
         event->accept();
         return;
     }
 
     // 滚轮缩放（沿视线方向移动相机）
     float delta = static_cast<float>(event->angleDelta().y());
-    glm::vec3 pos = m_camera_ptr->getPosition();
-    glm::vec3 target = m_camera_ptr->getTarget();
+    glm::vec3 pos = camera()->getPosition();
+    glm::vec3 target = camera()->getTarget();
     glm::vec3 dir = glm::normalize(target - pos);
-    
+
     pos += dir * delta * m_zoomSensitivity;
-    m_camera_ptr->setPosition(pos);
-    
+    camera()->setPosition(pos);
+
     event->accept();
 }
 
 void QtViewer::resetTransform()
 {
-    if (m_camera_ptr) {
-        m_camera_ptr->setPosition(glm::vec3(2.0f, 2.0f, 2.0f));
-        m_camera_ptr->setTarget(glm::vec3(0.0f, 0.0f, 0.0f));
+    if (camera()) {
+        camera()->setPosition(glm::vec3(2.0f, 2.0f, 2.0f));
+        camera()->setTarget(glm::vec3(0.0f, 0.0f, 0.0f));
     }
     m_autoRotate = true;
 }

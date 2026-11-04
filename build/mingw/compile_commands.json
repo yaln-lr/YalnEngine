@@ -1,0 +1,104 @@
+[
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnview.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnview.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnview.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnview.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnvulkaninstance.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnvulkaninstance.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnvulkaninstance.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnvulkaninstance.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalndevice.cpp.obj -c F:\\YalnEngine\\core\\src\\yalndevice.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalndevice.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalndevice.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnswapchain.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnswapchain.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnswapchain.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnswapchain.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnrenderpass.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnrenderpass.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnrenderpass.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnrenderpass.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalngraphicspipeline.cpp.obj -c F:\\YalnEngine\\core\\src\\yalngraphicspipeline.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalngraphicspipeline.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalngraphicspipeline.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnbuffer.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnbuffer.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnbuffer.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnbuffer.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnscene.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnscene.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnscene.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnscene.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnrenderer.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnrenderer.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnrenderer.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnrenderer.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnvertex.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnvertex.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnvertex.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnvertex.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\event.cpp.obj -c F:\\YalnEngine\\core\\src\\event.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\event.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\event.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalncamera.cpp.obj -c F:\\YalnEngine\\core\\src\\yalncamera.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalncamera.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalncamera.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnperspectivecamera.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnperspectivecamera.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnperspectivecamera.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnperspectivecamera.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DVK_USE_PLATFORM_WIN32_KHR -DYALN_CORE_EXPORTS -Dyaln_core_EXPORTS -IE:/Vulkan/glm-master -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o core\\CMakeFiles\\yaln_core.dir\\src\\yalnmesh.cpp.obj -c F:\\YalnEngine\\core\\src\\yalnmesh.cpp",
+  "file": "F:\\YalnEngine\\core\\src\\yalnmesh.cpp",
+  "output": "core\\CMakeFiles\\yaln_core.dir\\src\\yalnmesh.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DVK_USE_PLATFORM_WIN32_KHR -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 -IF:/YalnEngine/build/mingw/viewer/yalnviewer_autogen/include -IF:/YalnEngine/core/include -IF:/YalnEngine/viewer/include -IE:/Vulkan/glm-master -isystem D:/QT6/6.11.0/mingw_64/include/QtCore -isystem D:/QT6/6.11.0/mingw_64/include -isystem D:/QT6/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/QT6/6.11.0/mingw_64/include/QtGui -isystem D:/QT6/6.11.0/mingw_64/include/QtWidgets -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o viewer\\CMakeFiles\\yalnviewer.dir\\yalnviewer_autogen\\mocs_compilation.cpp.obj -c F:\\YalnEngine\\build\\mingw\\viewer\\yalnviewer_autogen\\mocs_compilation.cpp",
+  "file": "F:\\YalnEngine\\build\\mingw\\viewer\\yalnviewer_autogen\\mocs_compilation.cpp",
+  "output": "viewer\\CMakeFiles\\yalnviewer.dir\\yalnviewer_autogen\\mocs_compilation.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DVK_USE_PLATFORM_WIN32_KHR -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 -IF:/YalnEngine/build/mingw/viewer/yalnviewer_autogen/include -IF:/YalnEngine/core/include -IF:/YalnEngine/viewer/include -IE:/Vulkan/glm-master -isystem D:/QT6/6.11.0/mingw_64/include/QtCore -isystem D:/QT6/6.11.0/mingw_64/include -isystem D:/QT6/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/QT6/6.11.0/mingw_64/include/QtGui -isystem D:/QT6/6.11.0/mingw_64/include/QtWidgets -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o viewer\\CMakeFiles\\yalnviewer.dir\\src\\main.cpp.obj -c F:\\YalnEngine\\viewer\\src\\main.cpp",
+  "file": "F:\\YalnEngine\\viewer\\src\\main.cpp",
+  "output": "viewer\\CMakeFiles\\yalnviewer.dir\\src\\main.cpp.obj"
+},
+{
+  "directory": "F:/YalnEngine/build/mingw",
+  "command": "D:\\msys64\\ucrt64\\bin\\g++.exe -DMINGW_HAS_SECURE_API=1 -DQT_CORE_LIB -DQT_GUI_LIB -DQT_WIDGETS_LIB -DUNICODE -DVK_USE_PLATFORM_WIN32_KHR -DWIN32 -DWIN64 -D_ENABLE_EXTENDED_ALIGNED_STORAGE -D_UNICODE -D_WIN64 -IF:/YalnEngine/build/mingw/viewer/yalnviewer_autogen/include -IF:/YalnEngine/core/include -IF:/YalnEngine/viewer/include -IE:/Vulkan/glm-master -isystem D:/QT6/6.11.0/mingw_64/include/QtCore -isystem D:/QT6/6.11.0/mingw_64/include -isystem D:/QT6/6.11.0/mingw_64/mkspecs/win32-g++ -isystem D:/QT6/6.11.0/mingw_64/include/QtGui -isystem D:/QT6/6.11.0/mingw_64/include/QtWidgets -isystem D:/VulkanSDK/1.4.341.1/Include -g -std=c++17 -Wall -Wextra -pedantic -o viewer\\CMakeFiles\\yalnviewer.dir\\src\\qtviewer.cpp.obj -c F:\\YalnEngine\\viewer\\src\\qtviewer.cpp",
+  "file": "F:\\YalnEngine\\viewer\\src\\qtviewer.cpp",
+  "output": "viewer\\CMakeFiles\\yalnviewer.dir\\src\\qtviewer.cpp.obj"
+}
+]

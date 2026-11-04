@@ -1,0 +1,14 @@
+F:/YalnEngine/install///bin/glfw3.dll
+F:/YalnEngine/install///bin/platforms/qdirect2d.dll
+F:/YalnEngine/install///bin/platforms/qminimal.dll
+F:/YalnEngine/install///bin/platforms/qoffscreen.dll
+F:/YalnEngine/install///bin/platforms/qwindows.dll
+F:/YalnEngine/install///bin/Qt6Core.dll
+F:/YalnEngine/install///bin/Qt6Gui.dll
+F:/YalnEngine/install///bin/Qt6Widgets.dll
+F:/YalnEngine/install/shaders//graphics.frag.spv
+F:/YalnEngine/install/shaders//graphics.vert.spv
+F:/YalnEngine/install/shaders//shader.frag.spv
+F:/YalnEngine/install/shaders//shader.vert.spv
+F:/YalnEngine/install/bin/libyaln_core.dll
+F:/YalnEngine/install/bin/yalnviewer.exe

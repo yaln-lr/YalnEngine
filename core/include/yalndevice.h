@@ -8,54 +8,43 @@
 #include <vector>
 
 #include "global_type.h"
-#include "yalnvulkaninstance.h"
+#include "yalninterfaces.h"
 
 class YalnSurface;
 
 // ============================================================================
-//  YalnDevice
+//  YalnDevice —— IYalnDevice 默认实现
 //  职责：物理设备挑选、队列族查找、逻辑设备与队列、显存类型查找、能力打印。
-//        原 YalnView 的 Instance/Device 两段逻辑中被剥离出来的设备部分。
 // ============================================================================
-class YALN_CORE_EXPORT YalnDevice
+class YALN_CORE_EXPORT YalnDevice : public IYalnDevice
 {
 public:
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily;
-        std::optional<uint32_t> presentFamily;
-        bool isComplete() const {
-            return graphicsFamily.has_value() && presentFamily.has_value();
-        }
-    };
-
-    struct SwapChainSupportDetails {
-        vk::SurfaceCapabilitiesKHR        capabilities;
-        std::vector<vk::SurfaceFormatKHR> formats;
-        std::vector<vk::PresentModeKHR>   presentModes;
-    };
+    // 兼容别名：原内嵌结构已提升为接口层共享类型
+    using QueueFamilyIndices       = YalnQueueFamilyIndices;
+    using SwapChainSupportDetails  = YalnSwapChainSupportDetails;
 
     YalnDevice() = default;
-    ~YalnDevice() = default;
+    ~YalnDevice() override = default;
 
     YalnDevice(const YalnDevice&)            = delete;
     YalnDevice& operator=(const YalnDevice&) = delete;
 
-    bool initialize(const YalnVulkanInstance& instance, const YalnSurface& surface);
+    bool initialize(const IYalnInstance& instance, const IYalnSurface& surface) override;
 
-    const vk::raii::PhysicalDevice& physicalDevice() const { return m_physicalDevice; }
-    const vk::raii::Device&         device()         const { return m_device; }
-    const vk::raii::Queue&          graphicsQueue()  const { return m_graphicsQueue; }
-    const vk::raii::Queue&          presentQueue()   const { return m_presentQueue; }
-    const QueueFamilyIndices&       queueFamilies()  const { return m_queueIndices; }
+    const vk::raii::PhysicalDevice& physicalDevice() const override { return m_physicalDevice; }
+    const vk::raii::Device&         device()         const override { return m_device; }
+    const vk::raii::Queue&          graphicsQueue()  const override { return m_graphicsQueue; }
+    const vk::raii::Queue&          presentQueue()   const override { return m_presentQueue; }
+    const YalnQueueFamilyIndices&   queueFamilies()  const override { return m_queueIndices; }
 
-    bool isValid() const { return m_device != nullptr; }
+    bool isValid() const override { return m_device != nullptr; }
 
     // 设备空闲（重建交换链 / 重建网格缓冲前调用）
-    void waitIdle() const;
+    void waitIdle() const override;
 
     QueueFamilyIndices      findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice) const;
-    SwapChainSupportDetails querySwapChainSupport(const vk::raii::PhysicalDevice& physicalDevice) const;
-    uint32_t                findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const;
+    SwapChainSupportDetails querySwapChainSupport(const vk::raii::PhysicalDevice& physicalDevice) const override;
+    uint32_t                findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties) const override;
 
     void printCapacity() const;
 
@@ -65,8 +54,8 @@ private:
     bool checkDeviceExtensionSupport(const vk::raii::PhysicalDevice& physicalDevice) const;
     bool createLogicalDevice();
 
-    const YalnVulkanInstance* m_instance = nullptr;
-    const YalnSurface*        m_surface  = nullptr;
+    const IYalnInstance* m_instance = nullptr;
+    const IYalnSurface*  m_surface  = nullptr;
 
     vk::raii::PhysicalDevice m_physicalDevice{ nullptr };
     vk::raii::Device         m_device{ nullptr };

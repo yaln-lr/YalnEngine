@@ -3,9 +3,12 @@
 
 #include "yalncamera.h"
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
-class YALN_CORE_EXPORT YalnPerspectiveCamera : public YalnCamera
+// ============================================================================
+//  YalnPerspectiveCamera —— 透视投影相机
+//  继承 YalnCameraBase（视图矩阵 / 姿态已有默认实现），只补投影部分。
+// ============================================================================
+class YALN_CORE_EXPORT YalnPerspectiveCamera : public YalnCameraBase
 {
 public:
     YalnPerspectiveCamera(
@@ -28,9 +31,8 @@ public:
     // 当窗口大小改变时更新宽高比
     void setAspectRatio(float aspect) override { m_aspect = aspect; }
 
-protected:
-    virtual glm::mat4 getViewMatrix() override;
-
+    // 覆写保持 public：接口 YalnCamera 中声明为 public，
+    // 收窄到 protected 会破坏接口契约（具体类型无法直接调用）
     virtual glm::mat4 getProjectionMatrix() override;
 
 private:

@@ -1,11 +1,11 @@
-#include "../include/yalnswapchain.h"
+﻿#include "../include/yalnswapchain.h"
 #include "../include/yalnsurface.h"
 #include "../include/yalndevice.h"
 
 #include <array>
 #include <limits>
 
-bool YalnSwapChain::create(const YalnDevice& device, const YalnSurface& surface)
+bool YalnSwapChain::create(const IYalnDevice& device, const IYalnSurface& surface)
 {
     m_device  = &device;
     m_surface = &surface;

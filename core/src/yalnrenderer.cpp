@@ -1,4 +1,4 @@
-#include "../include/yalnrenderer.h"
+﻿#include "../include/yalnrenderer.h"
 #include "../include/yalndevice.h"
 #include "../include/yalnswapchain.h"
 #include "../include/yalnrenderpass.h"
@@ -6,17 +6,24 @@
 #include "../include/yalnscene.h"
 #include "../include/yalnmesh.h"
 
+#include <algorithm>
 #include <array>
 #include <iostream>
 #include <limits>
 
 // ======================== 初始化 ========================
 
-bool YalnRenderer::initialize(const YalnDevice&           device,
-                              const YalnSwapChain&        swapChain,
-                              const YalnGraphicsPipeline& pipeline)
+bool YalnRenderer::initialize(const IYalnDevice&        device,
+                              const IYalnSwapChain&     swapChain,
+                              const IYalnPipeline&      pipeline,
+                              const YalnRendererConfig& config)
 {
     m_device = &device;
+    m_config = config;
+
+    // 同时飞行帧数不能超过交换链图像数量（防御性钳制，组合校验在 YalnView）
+    m_maxFramesInFlight = std::clamp(config.maxFramesInFlight, 1u,
+                                     static_cast<uint32_t>(swapChain.images().size()));
 
     if (!createCommandPool())                          return false;
     if (!createUniformBuffers(swapChain))              return false;
@@ -30,7 +37,7 @@ bool YalnRenderer::initialize(const YalnDevice&           device,
     return true;
 }
 
-bool YalnRenderer::recreate(const YalnSwapChain& swapChain, const YalnGraphicsPipeline& pipeline)
+bool YalnRenderer::recreate(const IYalnSwapChain& swapChain, const IYalnPipeline& pipeline)
 {
     if (!m_initialized)
     {
@@ -72,7 +79,7 @@ bool YalnRenderer::createCommandPool()
     return m_commandPool != nullptr;
 }
 
-bool YalnRenderer::createUniformBuffers(const YalnSwapChain& swapChain)
+bool YalnRenderer::createUniformBuffers(const IYalnSwapChain& swapChain)
 {
     const vk::DeviceSize bufferSize = sizeof(YalnFrameUniform);
 
@@ -93,7 +100,7 @@ bool YalnRenderer::createUniformBuffers(const YalnSwapChain& swapChain)
     return true;
 }
 
-bool YalnRenderer::createDescriptorPool(const YalnSwapChain& swapChain)
+bool YalnRenderer::createDescriptorPool(const IYalnSwapChain& swapChain)
 {
     const uint32_t imageCount = static_cast<uint32_t>(swapChain.images().size());
 
@@ -111,8 +118,16 @@ bool YalnRenderer::createDescriptorPool(const YalnSwapChain& swapChain)
     return m_descriptorPool != nullptr;
 }
 
-bool YalnRenderer::createDescriptorSets(const YalnSwapChain& swapChain, const YalnGraphicsPipeline& pipeline)
+bool YalnRenderer::createDescriptorSets(const IYalnSwapChain& swapChain, const IYalnPipeline& pipeline)
 {
+    m_descriptorSets.clear();
+
+    // 管线未定义描述符布局：跳过描述符创建（录制时也不再绑定）
+    if (!pipeline.hasDescriptorSets())
+    {
+        return true;
+    }
+
     const size_t imageCount = swapChain.images().size();
     if (m_uniformBuffers.size() != imageCount)
     {
@@ -138,7 +153,7 @@ bool YalnRenderer::createDescriptorSets(const YalnSwapChain& swapChain, const Ya
         const std::array<vk::WriteDescriptorSet, 1> descriptorWrites = {
             vk::WriteDescriptorSet(
                 *m_descriptorSets[i],
-                0, 0, 1,
+                m_config.uniformBinding, 0, 1,
                 vk::DescriptorType::eUniformBuffer,
                 nullptr,
                 &bufferInfo,
@@ -151,7 +166,7 @@ bool YalnRenderer::createDescriptorSets(const YalnSwapChain& swapChain, const Ya
     return true;
 }
 
-bool YalnRenderer::createCommandBuffers(const YalnSwapChain& swapChain)
+bool YalnRenderer::createCommandBuffers(const IYalnSwapChain& swapChain)
 {
     m_commandBuffers.clear();
 
@@ -164,7 +179,7 @@ bool YalnRenderer::createCommandBuffers(const YalnSwapChain& swapChain)
     return !m_commandBuffers.empty();
 }
 
-bool YalnRenderer::createSyncObjects(const YalnSwapChain& swapChain)
+bool YalnRenderer::createSyncObjects(const IYalnSwapChain& swapChain)
 {
     const size_t imageCount = swapChain.images().size();
 
@@ -184,7 +199,7 @@ bool YalnRenderer::createSyncObjects(const YalnSwapChain& swapChain)
     }
 
     // 栅栏只需要同时飞行的帧数
-    for (size_t i = 0; i < YALN_MAX_FRAMES_IN_FLIGHT; i++)
+    for (size_t i = 0; i < m_maxFramesInFlight; i++)
     {
         m_inFlightFences.emplace_back(m_device->device(), fenceInfo);
     }
@@ -208,10 +223,10 @@ void YalnRenderer::destroyFrameResources()
 
 // ======================== 帧循环 ========================
 
-YalnRenderer::FrameResult YalnRenderer::drawFrame(const YalnSwapChain&        swapChain,
-                                                  const YalnGraphicsPipeline& pipeline,
-                                                  const YalnRenderPass&       renderPass,
-                                                  const YalnScene&            scene,
+YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
+                                       const IYalnPipeline&   pipeline,
+                            const IYalnRenderPass& renderPass,
+                            IYalnScene&            scene,
                                                   const YalnCameraPtr&        camera)
 {
     if (!m_initialized || camera == nullptr)
@@ -223,6 +238,9 @@ YalnRenderer::FrameResult YalnRenderer::drawFrame(const YalnSwapChain&        sw
     {
         return FrameResult::NotReady;
     }
+
+    // 每帧重算场景树世界矩阵并收集可见绘制项（相机位置供公告板使用）
+    scene.update(camera->getPosition());
 
     const auto& device = m_device->device();
 
@@ -286,7 +304,7 @@ YalnRenderer::FrameResult YalnRenderer::drawFrame(const YalnSwapChain&        sw
 
     const auto presentResult = m_device->presentQueue().presentKHR(presentInfo);
 
-    m_currentFrame = (m_currentFrame + 1) % YALN_MAX_FRAMES_IN_FLIGHT;
+    m_currentFrame = (m_currentFrame + 1) % m_maxFramesInFlight;
 
     if (presentResult == vk::Result::eErrorOutOfDateKHR || presentResult == vk::Result::eSuboptimalKHR)
     {
@@ -296,12 +314,12 @@ YalnRenderer::FrameResult YalnRenderer::drawFrame(const YalnSwapChain&        sw
     return FrameResult::Rendered;
 }
 
-void YalnRenderer::recordCommandBuffer(vk::CommandBuffer           commandBuffer,
-                                       uint32_t                    imageIndex,
-                                       const YalnSwapChain&        swapChain,
-                                       const YalnGraphicsPipeline& pipeline,
-                                       const YalnRenderPass&       renderPass,
-                                       const YalnScene&            scene)
+void YalnRenderer::recordCommandBuffer(vk::CommandBuffer          commandBuffer,
+                             uint32_t                   imageIndex,
+                             const IYalnSwapChain&      swapChain,
+                             const IYalnPipeline&       pipeline,
+                             const IYalnRenderPass&     renderPass,
+                             const IYalnScene&          scene)
 {
     const vk::Extent2D extent = swapChain.extent();
 
@@ -310,12 +328,20 @@ void YalnRenderer::recordCommandBuffer(vk::CommandBuffer           commandBuffer
     const vk::CommandBufferBeginInfo beginInfo{};
     commandBuffer.begin(beginInfo);
 
-    const vk::ClearValue clearColor(vk::ClearColorValue(std::array<float, 4>{ 0.0f, 0.1f, 0.25f, 1.0f }));
+    // 清除值必须覆盖渲染通道全部 loadOp=eClear 的附件（VUID-00902）：
+    // 深度附件存在时需附带 DepthStencil 清除值（深度清 1 = 最远）
+    const vk::ClearColorValue clearColor(m_config.clearColor);
+    std::array<vk::ClearValue, 2> clearValues = {
+        vk::ClearValue(clearColor),
+        vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0))
+    };
+    const uint32_t clearCount = renderPass.hasDepth() ? 2u : 1u;
+
     const vk::RenderPassBeginInfo renderPassInfo(
         *renderPass.handle(),
         *renderPass.framebuffers()[imageIndex],
         { { 0, 0 }, extent },
-        1, &clearColor);
+        clearCount, clearValues.data());
 
     commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
     commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle());
@@ -327,30 +353,34 @@ void YalnRenderer::recordCommandBuffer(vk::CommandBuffer           commandBuffer
     commandBuffer.setViewport(0, viewport);
     commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, extent));
 
-    commandBuffer.bindDescriptorSets(
-        vk::PipelineBindPoint::eGraphics,
-        *pipeline.layout(),
-        0, *m_descriptorSets[imageIndex],
-        {});
-
-    const auto& meshes    = scene.meshes();
-    const auto& gpuMeshes = scene.gpuMeshes();
-
-    for (size_t i = 0; i < gpuMeshes.size(); i++)
+    // 描述符集（管线未声明描述符布局时跳过）
+    if (!m_descriptorSets.empty())
     {
-        const YalnGpuMesh& gpuMesh = gpuMeshes[i];
+        commandBuffer.bindDescriptorSets(
+            vk::PipelineBindPoint::eGraphics,
+            *pipeline.layout(),
+            0, *m_descriptorSets[imageIndex],
+            {});
+    }
+
+    // 场景树收集的绘制项（同一网格多处实例共享一份 GPU 缓冲）
+    for (const YalnDrawItem& item : scene.drawItems())
+    {
+        const YalnGpuMesh& gpuMesh = *item.gpuMesh;
 
         commandBuffer.bindVertexBuffers(0, { gpuMesh.vertexBuffer.handle() }, { 0 });
         commandBuffer.bindIndexBuffer(gpuMesh.indexBuffer.handle(), 0, vk::IndexType::eUint32);
 
-        // Push Constants：模型矩阵
-        const glm::mat4 modelMatrix = meshes[i]->getModelMatrix();
-        constexpr uint32_t size = sizeof(glm::mat4);
-        commandBuffer.pushConstants(
-            *pipeline.layout(),
-            vk::ShaderStageFlags{ vk::ShaderStageFlagBits::eVertex },
-            0u,
-            vk::ArrayProxy<const float>(size / sizeof(float), &modelMatrix[0][0]));
+        // Push Constants：世界矩阵（管线未声明推常量时跳过）
+        if (pipeline.hasPushConstants())
+        {
+            constexpr uint32_t size = sizeof(glm::mat4);
+            commandBuffer.pushConstants(
+                *pipeline.layout(),
+                vk::ShaderStageFlags{ vk::ShaderStageFlagBits::eVertex },
+                0u,
+                vk::ArrayProxy<const float>(size / sizeof(float), &item.world[0][0]));
+        }
 
         commandBuffer.drawIndexed(gpuMesh.indexCount, 1, 0, 0, 0);
     }

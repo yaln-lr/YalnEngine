@@ -1,10 +1,10 @@
-#include "../include/yalnbuffer.h"
-#include "../include/yalndevice.h"
+﻿#include "../include/yalnbuffer.h"
+#include "../include/yalninterfaces.h"
 
 #include <cstring>
 #include <stdexcept>
 
-bool YalnBuffer::create(const YalnDevice&       device,
+bool YalnBuffer::create(const IYalnDevice&       device,
                         vk::DeviceSize          size,
                         vk::BufferUsageFlags    usage,
                         vk::MemoryPropertyFlags properties)
@@ -43,7 +43,7 @@ void YalnBuffer::write(const void* data, vk::DeviceSize size, vk::DeviceSize off
     m_memory.unmapMemory();
 }
 
-bool YalnBuffer::copyBuffer(const YalnDevice&            device,
+bool YalnBuffer::copyBuffer(const IYalnDevice&            device,
                             const vk::raii::CommandPool& commandPool,
                             vk::Buffer                   srcBuffer,
                             vk::Buffer                   dstBuffer,
@@ -71,7 +71,7 @@ bool YalnBuffer::copyBuffer(const YalnDevice&            device,
     return true;
 }
 
-bool YalnBuffer::uploadDeviceLocal(const YalnDevice&            device,
+bool YalnBuffer::uploadDeviceLocal(const IYalnDevice&            device,
                                    const vk::raii::CommandPool& commandPool,
                                    const void*                  data,
                                    vk::DeviceSize               size,

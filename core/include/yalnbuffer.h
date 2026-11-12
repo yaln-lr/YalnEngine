@@ -8,12 +8,11 @@
 
 #include "global_type.h"
 
-class YalnDevice;
+class IYalnDevice;
 
 // ============================================================================
 //  YalnBuffer
 //  职责：一块 Vulkan 缓冲 + 其绑定的显存，封装创建、写入、暂存拷贝。
-//        原 YalnView 里的 createBuffer / copyBuffer / findMemoryType 收敛到此处。
 // ============================================================================
 class YALN_CORE_EXPORT YalnBuffer
 {
@@ -27,10 +26,10 @@ public:
     YalnBuffer& operator=(YalnBuffer&&) noexcept = default;
 
     // 分配缓冲并按需绑定显存
-    bool create(const YalnDevice&        device,
-                vk::DeviceSize           size,
-                vk::BufferUsageFlags     usage,
-                vk::MemoryPropertyFlags  properties);
+    bool create(const IYalnDevice&          device,
+                vk::DeviceSize              size,
+                vk::BufferUsageFlags        usage,
+                vk::MemoryPropertyFlags     properties);
 
     void destroy();
 
@@ -42,14 +41,14 @@ public:
     vk::DeviceSize size()  const { return m_size; }
 
     // 用一次性命令把 src 拷到 dst（内部自行分配临时命令缓冲并等待完成）
-    static bool copyBuffer(const YalnDevice&                device,
+    static bool copyBuffer(const IYalnDevice&               device,
                            const vk::raii::CommandPool&     commandPool,
                            vk::Buffer                       srcBuffer,
                            vk::Buffer                       dstBuffer,
                            vk::DeviceSize                   size);
 
     // 创建 + 上传数据 + 转移到设备本地显存（顶点/索引缓冲的常用路径）
-    static bool uploadDeviceLocal(const YalnDevice&            device,
+    static bool uploadDeviceLocal(const IYalnDevice&           device,
                                   const vk::raii::CommandPool& commandPool,
                                   const void*                  data,
                                   vk::DeviceSize               size,

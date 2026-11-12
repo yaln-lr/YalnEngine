@@ -1,82 +1,59 @@
 #include "../include/yalngraphicspipeline.h"
-#include "../include/yalndevice.h"
+#include "../include/yalnshaderprogram.h"
+#include "../include/yalninterfaces.h"
 #include "../include/yalnvertex.h"
 
 #include <array>
-#include <fstream>
 #include <iostream>
-#include <stdexcept>
 
-std::vector<char> YalnGraphicsPipeline::readFile(const std::string& filename)
+// 默认配置：与既有 shader.vert/frag（UBO 投影视图矩阵 + 推常量模型矩阵）匹配
+YalnPipelineConfig YalnPipelineConfig::makeDefault()
 {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open())
-    {
-        throw std::runtime_error("failed to open file: " + filename);
-    }
-
-    const size_t fileSize = static_cast<size_t>(file.tellg());
-    std::vector<char> buffer(fileSize);
-    file.seekg(0);
-    file.read(buffer.data(), static_cast<std::streamsize>(fileSize));
-    file.close();
-    return buffer;
-}
-
-vk::raii::ShaderModule YalnGraphicsPipeline::createShaderModule(const YalnDevice& device, const std::vector<char>& code) const
-{
-    vk::ShaderModuleCreateInfo createInfo(
-        {},
-        static_cast<uint32_t>(code.size()),
-        reinterpret_cast<const uint32_t*>(code.data()));
-
-    return vk::raii::ShaderModule(device.device(), createInfo);
-}
-
-void YalnGraphicsPipeline::createDescriptorSetLayout(const YalnDevice& device)
-{
-    vk::DescriptorSetLayoutBinding uboLayoutBinding(
+    YalnPipelineConfig config;
+    config.vertShaderPath = "../shaders/shader.vert.spv";
+    config.fragShaderPath = "../shaders/shader.frag.spv";
+    config.descriptorBindings.push_back(vk::DescriptorSetLayoutBinding(
         0,
         vk::DescriptorType::eUniformBuffer,
         1,
         vk::ShaderStageFlagBits::eVertex,
-        nullptr);
-
-    vk::DescriptorSetLayoutCreateInfo layoutInfo({}, 1, &uboLayoutBinding);
-    m_descriptorSetLayout = vk::raii::DescriptorSetLayout(device.device(), layoutInfo);
+        nullptr));
+    return config;
 }
 
-bool YalnGraphicsPipeline::create(const YalnDevice&           device,
+bool YalnGraphicsPipeline::create(const IYalnDevice&          device,
                                   const vk::raii::RenderPass& renderPass,
-                                  const std::string&          vertPath,
-                                  const std::string&          fragPath)
+                                  const YalnPipelineConfig&   config,
+                                  const IYalnShaderProgram&   shaderProgram)
 {
-    createDescriptorSetLayout(device);
+    destroy();
+    m_config = config;
 
-    std::vector<char> vertShaderCode;
-    std::vector<char> fragShaderCode;
-    try
+    if (!shaderProgram.isValid())
     {
-        vertShaderCode = readFile(vertPath);
-        fragShaderCode = readFile(fragPath);
-    }
-    catch (const std::exception& e)
-    {
-        std::cerr << "[YalnGraphicsPipeline] " << e.what() << std::endl;
+        std::cerr << "[YalnGraphicsPipeline] 着色器程序尚未加载（请先调用 load）" << std::endl;
         return false;
     }
 
-    const auto vertShaderModule = createShaderModule(device, vertShaderCode);
-    const auto fragShaderModule = createShaderModule(device, fragShaderCode);
+    // 图形管线要求图形程序（Vertex + Fragment 必须存在，规则详见 IYalnShaderProgram）
+    if (shaderProgram.type() != IYalnShaderProgram::Type::Graphics)
+    {
+        std::cerr << "[YalnGraphicsPipeline] 着色器程序类型不是 Graphics，无法用于图形管线"
+                  << "（Compute 程序请使用计算管线）" << std::endl;
+        return false;
+    }
 
-    vk::PipelineShaderStageCreateInfo vertShaderStageInfo({}, vk::ShaderStageFlagBits::eVertex,   *vertShaderModule, "main");
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo({}, vk::ShaderStageFlagBits::eFragment, *fragShaderModule, "main");
+    // ---- 描述符集布局（可空）----
+    if (!m_config.descriptorBindings.empty())
+    {
+        vk::DescriptorSetLayoutCreateInfo layoutInfo({}, m_config.descriptorBindings);
+        m_descriptorSetLayout = vk::raii::DescriptorSetLayout(device.device(), layoutInfo);
+    }
 
-    const std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages = {
-        vertShaderStageInfo, fragShaderStageInfo
-    };
+    // ---- 着色器阶段（由着色器程序提供，与加载来源解耦）----
+    const std::vector<vk::PipelineShaderStageCreateInfo> shaderStages = shaderProgram.stageInfos();
 
-    // 顶点输入
+    // 顶点输入（当前固定为 YalnVertexPC：位置 + 颜色）
     const auto bindingDescription    = YalnVertexPC::getBindingDescription();
     const auto attributeDescriptions = YalnVertexPC::getAttributeDescriptions();
 
@@ -88,7 +65,7 @@ bool YalnGraphicsPipeline::create(const YalnDevice&           device,
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
         {},
-        vk::PrimitiveTopology::eTriangleList,
+        m_config.topology,
         VK_FALSE);
 
     // 动态视口 + 裁剪：窗口缩放时无需重建管线
@@ -106,27 +83,28 @@ bool YalnGraphicsPipeline::create(const YalnDevice&           device,
         {},
         VK_FALSE,
         VK_FALSE,
-        vk::PolygonMode::eFill,
-        vk::CullModeFlagBits::eBack,
-        vk::FrontFace::eCounterClockwise,
+        m_config.polygonMode,
+        m_config.cullMode,
+        m_config.frontFace,
         VK_FALSE,
         0.0f, 0.0f, 0.0f,
-        1.0f);
+        m_config.lineWidth);
 
     vk::PipelineMultisampleStateCreateInfo multisampling(
         {},
-        vk::SampleCountFlagBits::e1,
+        m_config.samples,
         VK_FALSE,
         1.0f,
         nullptr,
         VK_FALSE,
         VK_FALSE);
 
+    // ---- 颜色混合（单颜色附件）----
     vk::PipelineColorBlendAttachmentState colorBlendAttachment(
-        VK_FALSE,
-        vk::BlendFactor::eZero, vk::BlendFactor::eOne,
+        m_config.blendEnable ? VK_TRUE : VK_FALSE,
+        m_config.blendSrcColorFactor, m_config.blendDstColorFactor,
         vk::BlendOp::eAdd,
-        vk::BlendFactor::eZero, vk::BlendFactor::eOne,
+        m_config.blendSrcAlphaFactor, m_config.blendDstAlphaFactor,
         vk::BlendOp::eAdd,
         vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
         vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
@@ -138,12 +116,34 @@ bool YalnGraphicsPipeline::create(const YalnDevice&           device,
         1, &colorBlendAttachment,
         { 0.0f, 0.0f, 0.0f, 0.0f });
 
-    // Push Constants：每个网格的模型矩阵
-    const vk::PushConstantRange pushConstantRange(vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4));
+    // ---- 深度模板状态（可选）----
+    const vk::PipelineDepthStencilStateCreateInfo depthStencil(
+        {},
+        m_config.depthTest  ? VK_TRUE : VK_FALSE,
+        m_config.depthWrite ? VK_TRUE : VK_FALSE,
+        m_config.depthCompareOp,
+        VK_FALSE, VK_FALSE,
+        {}, {},
+        0.0f, 1.0f);
+    const bool useDepth = m_config.depthTest || m_config.depthWrite;
+
+    // ---- 管线布局：描述符集（可空）+ 推常量（可空）----
+    std::vector<vk::DescriptorSetLayout> setLayouts;
+    if (m_descriptorSetLayout != nullptr)
+    {
+        setLayouts.push_back(*m_descriptorSetLayout);
+    }
+
+    std::vector<vk::PushConstantRange> pushConstantRanges;
+    if (m_config.pushConstant.size > 0 && bool(m_config.pushConstant.stageFlags))
+    {
+        pushConstantRanges.push_back(m_config.pushConstant);
+    }
+
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo(
         {},
-        1, &*m_descriptorSetLayout,
-        1, &pushConstantRange);
+        setLayouts,
+        pushConstantRanges);
 
     m_pipelineLayout = vk::raii::PipelineLayout(device.device(), pipelineLayoutInfo);
 
@@ -156,7 +156,7 @@ bool YalnGraphicsPipeline::create(const YalnDevice&           device,
         &viewportState,
         &rasterizer,
         &multisampling,
-        nullptr,
+        useDepth ? &depthStencil : nullptr,
         &colorBlending,
         &dynamicStateInfo,
         *m_pipelineLayout,
@@ -167,6 +167,30 @@ bool YalnGraphicsPipeline::create(const YalnDevice&           device,
 
     m_pipeline = vk::raii::Pipeline(device.device(), nullptr, pipelineInfo);
     return m_pipeline != nullptr;
+}
+
+bool YalnGraphicsPipeline::create(const IYalnDevice&          device,
+                                  const vk::raii::RenderPass& renderPass,
+                                  const YalnPipelineConfig&   config)
+{
+    // 兼容路径：按配置中的路径内建 SPIR-V 着色器程序
+    YalnSpirvShaderProgram program(config.vertShaderPath, config.fragShaderPath);
+    if (!program.load(device))
+    {
+        return false;
+    }
+    return create(device, renderPass, config, program);
+}
+
+bool YalnGraphicsPipeline::create(const IYalnDevice&          device,
+                                  const vk::raii::RenderPass& renderPass,
+                                  const std::string&          vertPath,
+                                  const std::string&          fragPath)
+{
+    YalnPipelineConfig config = YalnPipelineConfig::makeDefault();
+    config.vertShaderPath = vertPath;
+    config.fragShaderPath = fragPath;
+    return create(device, renderPass, config);
 }
 
 void YalnGraphicsPipeline::destroy()

@@ -1,11 +1,12 @@
-#include "../include/yalndevice.h"
+﻿#include "../include/yalndevice.h"
 #include "../include/yalnsurface.h"
+#include "../include/yalnvulkaninstance.h"
 
 #include <iostream>
 #include <set>
 #include <string>
 
-bool YalnDevice::initialize(const YalnVulkanInstance& instance, const YalnSurface& surface)
+bool YalnDevice::initialize(const IYalnInstance& instance, const IYalnSurface& surface)
 {
     m_instance = &instance;
     m_surface  = &surface;
@@ -25,7 +26,7 @@ bool YalnDevice::initialize(const YalnVulkanInstance& instance, const YalnSurfac
     return true;
 }
 
-void YalnDevice::waitIdle() const
+void YalnDevice::waitIdle() const /*override*/
 {
     if (m_device != nullptr)
     {
@@ -91,7 +92,7 @@ bool YalnDevice::checkDeviceExtensionSupport(const vk::raii::PhysicalDevice& phy
     return requiredExtensions.empty();
 }
 
-YalnDevice::QueueFamilyIndices YalnDevice::findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice) const
+YalnQueueFamilyIndices YalnDevice::findQueueFamilies(const vk::raii::PhysicalDevice& physicalDevice) const
 {
     QueueFamilyIndices indices;
     const auto queueFamilies = physicalDevice.getQueueFamilyProperties();
@@ -124,7 +125,7 @@ YalnDevice::QueueFamilyIndices YalnDevice::findQueueFamilies(const vk::raii::Phy
     return indices;
 }
 
-YalnDevice::SwapChainSupportDetails YalnDevice::querySwapChainSupport(const vk::raii::PhysicalDevice& physicalDevice) const
+YalnSwapChainSupportDetails YalnDevice::querySwapChainSupport(const vk::raii::PhysicalDevice& physicalDevice) const
 {
     SwapChainSupportDetails details;
 

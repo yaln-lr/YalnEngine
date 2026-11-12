@@ -7,16 +7,9 @@
 #include <vector>
 
 #include "global_type.h"
-#include "yalnbuffer.h"
-#include "yalncamera.h"
+#include "yalninterfaces.h"
 
-class YalnDevice;
-class YalnSwapChain;
-class YalnRenderPass;
-class YalnGraphicsPipeline;
-class YalnScene;
-
-// 同时在飞的帧数
+// 同时在飞行的帧数（默认值，可通过 YalnRendererConfig 覆盖）
 constexpr uint32_t YALN_MAX_FRAMES_IN_FLIGHT = 2;
 
 // 每帧的 uniform 数据（仅投影-视图矩阵）
@@ -25,66 +18,65 @@ struct YALN_CORE_EXPORT YalnFrameUniform {
 };
 
 // ============================================================================
-//  YalnRenderer
+//  YalnRenderer —— IYalnRenderer 默认实现
 //  职责：帧循环相关的全部 GPU 侧状态——
 //        命令池/命令缓冲、同步对象（信号量/栅栏）、每图像 uniform 缓冲、
 //        描述符池/描述符集，以及 drawFrame 的命令录制与提交。
-//        不持有交换链、管线、场景的创建逻辑，只使用它们。
 // ============================================================================
-class YALN_CORE_EXPORT YalnRenderer
+class YALN_CORE_EXPORT YalnRenderer : public IYalnRenderer
 {
 public:
-    enum class FrameResult {
-        Rendered,            // 正常出帧
-        SwapChainOutOfDate,  // 需要重建交换链
-        NotReady,            // 场景尚未就绪，跳过
-        Failed               // 提交/获取失败
-    };
+    // 兼容别名：枚举定义已提升为接口层共享类型
+    using FrameResult = YalnFrameResult;
 
     YalnRenderer() = default;
 
     YalnRenderer(const YalnRenderer&)            = delete;
     YalnRenderer& operator=(const YalnRenderer&) = delete;
 
-    // 创建命令池、uniform 缓冲、描述符、命令缓冲、同步对象
-    bool initialize(const YalnDevice&         device,
-                    const YalnSwapChain&      swapChain,
-                    const YalnGraphicsPipeline& pipeline);
+    bool initialize(const IYalnDevice&        device,
+                    const IYalnSwapChain&     swapChain,
+                    const IYalnPipeline&      pipeline,
+                    const YalnRendererConfig& config = YalnRendererConfig::makeDefault()) override;
 
     // 交换链重建后调用：重建依赖交换链图像数量的资源
-    bool recreate(const YalnSwapChain& swapChain, const YalnGraphicsPipeline& pipeline);
+    bool recreate(const IYalnSwapChain& swapChain, const IYalnPipeline& pipeline) override;
 
-    void shutdown();
+    void shutdown() override;
 
-    FrameResult drawFrame(const YalnSwapChain&        swapChain,
-                          const YalnGraphicsPipeline& pipeline,
-                          const YalnRenderPass&       renderPass,
-                          const YalnScene&            scene,
-                          const YalnCameraPtr&        camera);
+    YalnFrameResult drawFrame(const IYalnSwapChain&  swapChain,
+                              const IYalnPipeline&   pipeline,
+                              const IYalnRenderPass& renderPass,
+                              IYalnScene&            scene,
+                              const YalnCameraPtr&   camera) override;
 
     // 供场景上传网格缓冲时复用
-    const vk::raii::CommandPool& commandPool() const { return m_commandPool; }
+    const vk::raii::CommandPool& commandPool() const override { return m_commandPool; }
 
-    bool isValid() const { return m_initialized; }
+    const YalnRendererConfig& config() const override { return m_config; }
+    bool isValid() const override { return m_initialized; }
 
 private:
     bool createCommandPool();
-    bool createUniformBuffers(const YalnSwapChain& swapChain);
-    bool createDescriptorPool(const YalnSwapChain& swapChain);
-    bool createDescriptorSets(const YalnSwapChain& swapChain, const YalnGraphicsPipeline& pipeline);
-    bool createCommandBuffers(const YalnSwapChain& swapChain);
-    bool createSyncObjects(const YalnSwapChain& swapChain);
+    bool createUniformBuffers(const IYalnSwapChain& swapChain);
+    bool createDescriptorPool(const IYalnSwapChain& swapChain);
+    bool createDescriptorSets(const IYalnSwapChain& swapChain, const IYalnPipeline& pipeline);
+    bool createCommandBuffers(const IYalnSwapChain& swapChain);
+    bool createSyncObjects(const IYalnSwapChain& swapChain);
     void destroyFrameResources();
 
-    void recordCommandBuffer(vk::CommandBuffer                  commandBuffer,
-                             uint32_t                           imageIndex,
-                             const YalnSwapChain&               swapChain,
-                             const YalnGraphicsPipeline&        pipeline,
-                             const YalnRenderPass&              renderPass,
-                             const YalnScene&                   scene);
+    void recordCommandBuffer(vk::CommandBuffer          commandBuffer,
+                             uint32_t                   imageIndex,
+                             const IYalnSwapChain&      swapChain,
+                             const IYalnPipeline&       pipeline,
+                             const IYalnRenderPass&     renderPass,
+                             const IYalnScene&          scene);
 
-    const YalnDevice* m_device = nullptr;
-    bool              m_initialized = false;
+    const IYalnDevice* m_device = nullptr;
+    bool               m_initialized = false;
+
+    YalnRendererConfig m_config;
+    uint32_t           m_maxFramesInFlight = YALN_MAX_FRAMES_IN_FLIGHT;
 
     vk::raii::CommandPool m_commandPool{ nullptr };
 

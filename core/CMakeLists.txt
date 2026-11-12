@@ -23,6 +23,12 @@ set(YALN_CORE_SRCS
     ./src/event.cpp
     ./src/yalncamera.cpp
     ./src/yalnperspectivecamera.cpp
+    ./src/yalnorthocamera.cpp        # 正交投影相机
+    ./src/yalnorbitcamera.cpp        # 轨道环绕相机
+    ./src/yalnfirstpersoncamera.cpp  # 第一人称飞行相机
+    ./src/yalnshader.cpp             # 单着色器（SPIR-V 加载）
+    ./src/yalnshaderprogram.cpp      # 着色器程序（集合 + 组合规则）
+    ./src/yalnnode.cpp               # 场景树节点（普通/组/叶子）
     ./src/yalnmesh.cpp
 )
 set(YALN_CORE_HDRS
@@ -44,6 +50,14 @@ set(YALN_CORE_HDRS
     ./include/event.h
     ./include/yalncamera.h
     ./include/yalnperspectivecamera.h
+    ./include/yalnorthocamera.h
+    ./include/yalnorbitcamera.h
+    ./include/yalnfirstpersoncamera.h
+    ./include/yalnshader.h
+    ./include/yalnshaderprogram.h
+    ./include/yalninterfaces.h
+    ./include/yalndrawable.h
+    ./include/yalnnode.h
     ./include/yalnmesh.h
 )
 

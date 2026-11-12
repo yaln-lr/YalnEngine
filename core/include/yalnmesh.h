@@ -5,71 +5,96 @@
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/glm.hpp>
+#include <cstddef>
 #include <string>
 #include <vector>
 #include "yalnvertex.h"
 #include "global_type.h"
 
+// ============================================================================
+//  YalnMesh —— 网格抽象接口（纯虚，不含数据与实现）
+//
+//  变化点：不同场景的网格来源不同——程序化几何（Cube/Sphere）、文件加载
+//  （obj/gltf）、程序生成（地形/噪声）、甚至 GPU 直供顶点流。
+//  YalnScene / YalnRenderer 只依赖本接口，新增网格 = 新增派生类，上层零改动。
+// ============================================================================
 class YALN_CORE_EXPORT YalnMesh {
 public:
-    virtual ~YalnMesh(){};
-    
-    // 清空数据
+    virtual ~YalnMesh() = default;
+
+    // 顶点与索引（YalnScene 据此创建 GPU 缓冲）
+    virtual const std::vector<YalnVertexPC>& getVertices() const = 0;
+    virtual const std::vector<uint32_t>&     getIndices()  const = 0;
+
+    // 模型矩阵（YalnRenderer 每帧经 Push Constants 上传）
+    virtual glm::mat4 getModelMatrix() const = 0;
+
+    // 是否包含可渲染数据
+    virtual bool isValid() const = 0;
+
+    // CPU 端内存占用（字节）
+    virtual size_t getCPUMemorySize() const = 0;
+};
+
+// ============================================================================
+//  YalnStaticMesh —— 通用静态网格实现
+//
+//  CPU 端顶点/索引 + TRS 变换。绝大多数静态网格都可继承它，
+//  子类只需在构造时填充 m_vertices / m_indices（如 YalnCube / YalnSphere）。
+//  动态网格（每帧改顶点）或 GPU 侧网格可实现 YalnMesh 接口另起炉灶。
+// ============================================================================
+class YALN_CORE_EXPORT YalnStaticMesh : public YalnMesh {
+public:
+    YalnStaticMesh() = default;
+    virtual ~YalnStaticMesh() = default;
+
+    // ---- YalnMesh 接口实现 ----
+    const std::vector<YalnVertexPC>& getVertices() const override { return m_vertices; }
+    const std::vector<uint32_t>&     getIndices()  const override { return m_indices; }
+    glm::mat4 getModelMatrix() const override;
+    bool isValid() const override;
+    size_t getCPUMemorySize() const override;
+
+    // ---- 数据操作 ----
     void clear();
-    
-    // 获取内存占用（字节）
-    size_t getCPUMemorySize() const;
-    
-    // 检查是否有效
-    bool isValid() const;
-    
-    // 计算包围盒
     void calculateBounds(glm::vec3& minBounds, glm::vec3& maxBounds) const;
-    
-    // 获取顶点和索引数据
-    const std::vector<YalnVertexPC>& getVertices() const { return vertices; }
-    const std::vector<uint32_t>& getIndices() const { return indices; }
-    
-    // 变换参数
-    glm::vec3 m_position{0.0f, 0.0f, 0.0f};  // 位置偏移
+
+    // 变换参数（保持原有公共字段用法）
+    glm::vec3 m_position{0.0f, 0.0f, 0.0f};   // 位置偏移
     glm::vec3 m_rotation{0.0f, 0.0f, 0.0f};   // 旋转角度（弧度）
     glm::vec3 m_scale{1.0f, 1.0f, 1.0f};      // 缩放
-    
-    // 获取模型矩阵
-    glm::mat4 getModelMatrix() const {
-        glm::mat4 model = glm::identity<glm::mat4>();
-        model = glm::translate(model, m_position);
-        model = glm::rotate(model, m_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, m_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::rotate(model, m_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-        model = glm::scale(model, m_scale);
-        return model;
-    }
-    
+
 protected:
-    std::vector<YalnVertexPC> vertices;
-    std::vector<uint32_t> indices;
+    std::vector<YalnVertexPC> m_vertices;
+    std::vector<uint32_t>     m_indices;
 };
 
 // 立方体网格类
-class YALN_CORE_EXPORT YalnCube : public YalnMesh
+class YALN_CORE_EXPORT YalnCube : public YalnStaticMesh
 {
 public:
     YalnCube(float l = 1.0f, float w = 1.0f, float h = 1.0f);
 };
 
 // 球体网格类
-class YALN_CORE_EXPORT YalnSphere : public YalnMesh
+class YALN_CORE_EXPORT YalnSphere : public YalnStaticMesh
 {
 public:
     YalnSphere(float radius = 0.5f, int segments = 32);
-    
+
     float getRadius() const { return m_radius; }
     int getSegments() const { return m_segments; }
-    
+
 private:
     float m_radius;
     int m_segments;
+};
+
+// 四棱锥网格类（底面 w×l 居中于原点，顶点朝 +Z，整体沿 Z 居中）——适合做屋顶
+class YALN_CORE_EXPORT YalnPyramid : public YalnStaticMesh
+{
+public:
+    YalnPyramid(float w = 1.0f, float l = 1.0f, float h = 1.0f);
 };
 
 #endif // YALN_MESH_H

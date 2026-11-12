@@ -8,11 +8,11 @@
 #include <vector>
 
 #include "global_type.h"
+#include "yalninterfaces.h"
 
 // ============================================================================
-//  YalnVulkanInstance
+//  YalnVulkanInstance —— IYalnInstance 默认实现
 //  职责：Vulkan 实例（VkInstance）、校验层开关、调试消息信使。
-//        不涉及任何设备/交换链/渲染逻辑。
 // ============================================================================
 
 // 编译期决定是否启用校验层：Debug 构建开启，Release 关闭
@@ -22,21 +22,21 @@ constexpr bool YALN_ENABLE_VALIDATION_LAYER = false;
 constexpr bool YALN_ENABLE_VALIDATION_LAYER = true;
 #endif
 
-class YALN_CORE_EXPORT YalnVulkanInstance
+class YALN_CORE_EXPORT YalnVulkanInstance : public IYalnInstance
 {
 public:
     YalnVulkanInstance() = default;
-    ~YalnVulkanInstance() = default;
+    ~YalnVulkanInstance() override = default;
 
     YalnVulkanInstance(const YalnVulkanInstance&)            = delete;
     YalnVulkanInstance& operator=(const YalnVulkanInstance&) = delete;
 
     // 创建实例。extensions 由调用方（视图层）提供实例级扩展
-    bool create(const char* applicationName, const std::vector<const char*>& extensions);
+    bool create(const char* applicationName, const std::vector<const char*>& extensions) override;
 
-    const vk::raii::Context&  context()  const { return m_context; }
-    const vk::raii::Instance& handle()   const { return m_instance; }
-    bool isValid()                       const { return m_instance != nullptr; }
+    const vk::raii::Context&  context()  const override { return m_context; }
+    const vk::raii::Instance& handle()   const override { return m_instance; }
+    bool isValid()                       const override { return m_instance != nullptr; }
     bool validationEnabled()             const { return m_validationEnabled; }
 
     // 校验层相关（设备层创建逻辑设备时也会用到）

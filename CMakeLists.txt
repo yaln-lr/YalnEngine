@@ -33,11 +33,14 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
 
 set(THIRDPARTY_DIR ${CMAKE_SOURCE_DIR}/thirdparty)
 
+# Eigen（四元数/旋转数学）
+set(EIGEN_INCLUDE_DIRS ${THIRDPARTY_DIR}/eigen-5.0.1)
+
 # ======================== 公共函数 ========================
 
 # 为目标添加Vulkan平台配置（头文件、链接库）
 function(configure_vulkan TARGET)
-    target_include_directories(${TARGET} PRIVATE ${Vulkan_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS})
+    target_include_directories(${TARGET} PRIVATE ${Vulkan_INCLUDE_DIRS} ${GLM_INCLUDE_DIRS} ${EIGEN_INCLUDE_DIRS})
     if(WIN32)
         target_compile_definitions(${TARGET} PRIVATE VK_USE_PLATFORM_WIN32_KHR)
         target_link_libraries(${TARGET} PRIVATE -lvulkan-1)

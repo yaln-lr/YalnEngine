@@ -2,7 +2,6 @@
 #define YALN_NODE_H
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include <chrono>
 #include <memory>
@@ -12,9 +11,10 @@
 
 #include "global_type.h"
 #include "yalndrawable.h"
+#include "yalnmath.h"
 
 // ============================================================================
-//  场景树节点体系
+//  场景树节点体系（旋转统一使用 Eigen 四元数，无万向死锁）
 //
 //  结构节点：
 //    YalnNode       普通节点：可以包含子节点，也可以包含可绘制对象
@@ -22,17 +22,16 @@
 //    YalnLeafNode   叶子节点：只能包含可绘制对象（加子节点被拒绝）
 //    YalnSwitchNode 开关节点：多个子节点只激活一个（多状态/多方案切换）
 //
-//  变换节点族（语义单一，方便动画与装配；各自只取一个变换分量）：
-//    YalnTranslateNode 纯位移    YalnRotateNode 纯旋转（轴 + 角度）
-//    YalnScaleNode     纯缩放    YalnSpinNode   绕轴持续自旋（动画）
+//  变换节点族（语义单一，方便动画与装配）：
+//    YalnTranslateNode 纯位移    YalnRotateNode 纯旋转（四元数）
+//    YalnScaleNode     纯缩放    YalnSpinNode   绕轴持续自旋（四元数累乘）
 //
 //  行为节点：
 //    YalnBillboardNode 圆柱公告板：绕 Z 轴转向相机（Z 轴向上约定）
 //
-//  变换模型：世界矩阵 = 父世界矩阵 × 本节点 localMatrix() × 绘制项局部 TRS
+//  变换模型：世界矩阵 = 父世界矩阵 × T·R·S × 绘制项局部矩阵
+//  R 是四元数（Eigen），增量旋转 rotate(axis, angle) 不会产生万向死锁；
 //  每帧由场景调用 updateWorld(parentWorld, cameraPosition) 自顶向下重算。
-//
-//  约束执行：叶子/组节点的限制是运行期契约——违反时拒绝并给出原因。
 // ============================================================================
 
 class YALN_CORE_EXPORT YalnNode
@@ -81,14 +80,36 @@ public:
     const std::vector<std::unique_ptr<YalnNode>>&     children()  const { return m_children; }
     const std::vector<std::unique_ptr<YalnDrawable>>& drawables() const { return m_drawables; }
 
-    // ---- 本节点 TRS（变换节点族会选择性使用其中某分量，见各类说明）----
-    void setPosition(const glm::vec3& p) { m_position = p; }
-    void setRotation(const glm::vec3& r) { m_rotation = r; }   // 弧度
-    void setScale(const glm::vec3& s)    { m_scale = s; }
+    // ---- 本节点变换（位置/缩放 Eigen 向量，朝向 Eigen 四元数）----
 
-    const glm::vec3& position() const { return m_position; }
-    const glm::vec3& rotation() const { return m_rotation; }
-    const glm::vec3& scale()    const { return m_scale; }
+    void setPosition(const Eigen::Vector3f& p) { m_position = p; }
+    void setScale(const Eigen::Vector3f& s)    { m_scale = s; }
+
+    // 朝向整体赋值（四元数，自动归一化）
+    void setOrientation(const Eigen::Quaternionf& q) { m_orientation = q.normalized(); }
+
+    // 欧拉角便捷入口（弧度，yaw/pitch/roll 分量，本征序 ZYX）
+    // 内部立即转为四元数存储；仅建议用于初始化，动画请用 rotate()
+    void setEulerRotation(const Eigen::Vector3f& eulerYPR)
+    {
+        m_orientation = eulerToQuat(eulerYPR);
+    }
+
+    // 增量旋转（本节点局部空间，绕自身轴）：四元数右乘，任意角度无死锁
+    void rotate(const Eigen::Vector3f& axis, float angleRadians)
+    {
+        m_orientation = (m_orientation * axisAngleToQuat(axis, angleRadians)).normalized();
+    }
+
+    // 增量旋转（父级/世界空间）：四元数左乘
+    void rotateWorld(const Eigen::Vector3f& axis, float angleRadians)
+    {
+        m_orientation = (axisAngleToQuat(axis, angleRadians) * m_orientation).normalized();
+    }
+
+    const Eigen::Vector3f&    position()    const { return m_position; }
+    const Eigen::Vector3f&    scale()       const { return m_scale; }
+    const Eigen::Quaternionf& orientation() const { return m_orientation; }
 
     // 局部矩阵：普通节点 = T·R·S；变换/行为节点覆写自己的语义
     virtual glm::mat4 localMatrix() const;
@@ -111,9 +132,9 @@ protected:
     std::vector<std::unique_ptr<YalnNode>>     m_children;
     std::vector<std::unique_ptr<YalnDrawable>> m_drawables;
 
-    glm::vec3 m_position{ 0.0f, 0.0f, 0.0f };
-    glm::vec3 m_rotation{ 0.0f, 0.0f, 0.0f };
-    glm::vec3 m_scale{ 1.0f, 1.0f, 1.0f };
+    Eigen::Vector3f       m_position{ Eigen::Vector3f::Zero() };
+    Eigen::Quaternionf    m_orientation{ Eigen::Quaternionf::Identity() };
+    Eigen::Vector3f       m_scale{ Eigen::Vector3f::Ones() };
 
     glm::mat4 m_worldMatrix{ 1.0f };
 };
@@ -149,14 +170,16 @@ protected:
 };
 
 // ============================================================================
-//  变换节点族 —— 每个节点只负责一个变换分量，链式组合出复杂装配：
+//  变换节点族 —— 语义聚焦的便捷节点，链式组合出复杂装配：
 //
 //    TranslateNode("pos") → RotateNode("tilt") → ScaleNode("size") → 叶子
 //
-//  各类只取 base TRS 中属于自己的分量，其余分量被忽略（localMatrix 覆写）。
+//  约定：localMatrix 统一为 T·R·S（继承基类）；"纯位移/纯旋转/纯缩放"
+//  是使用约定——只设置对应分量，其余保持默认（零位移/恒等朝向/单位缩放）。
+//  在节点上额外设置其它分量同样有效（如 SpinNode 用 setPosition 抬高挂点）。
 // ============================================================================
 
-// 纯位移：localMatrix = T（旋转/缩放分量被忽略）
+// 位移节点：语义别名 + 只关注 position 的使用约定
 class YALN_CORE_EXPORT YalnTranslateNode : public YalnNode
 {
 public:
@@ -166,13 +189,11 @@ public:
     Type nodeType() const override { return Type::Translate; }
 
     // 语义别名：位移节点的"偏移量"就是 base 的 position
-    void setOffset(const glm::vec3& offset) { setPosition(offset); }
-    const glm::vec3& offset() const { return position(); }
-
-    glm::mat4 localMatrix() const override;
+    void setOffset(const Eigen::Vector3f& offset) { setPosition(offset); }
+    const Eigen::Vector3f& offset() const { return position(); }
 };
 
-// 纯旋转：localMatrix = R(angle, axis)（position/scale 分量被忽略）
+// 旋转节点：轴角便捷入口（四元数存储，增量旋转无万向死锁）
 class YALN_CORE_EXPORT YalnRotateNode : public YalnNode
 {
 public:
@@ -181,24 +202,22 @@ public:
 
     Type nodeType() const override { return Type::Rotate; }
 
-    void setAxis(const glm::vec3& axis)
+    // 一次设置轴角旋转（自动归一化轴）
+    void setAxisAngle(const Eigen::Vector3f& axis, float angleRadians)
     {
-        const float len = glm::length(axis);
-        m_axis = len > 1e-6f ? axis / len : glm::vec3(0.0f, 0.0f, 1.0f);   // 归一化，零向量兜底
+        setOrientation(axisAngleToQuat(axis, angleRadians));
     }
-    void setAngle(float angleRadians)      { m_angle = angleRadians; }
 
-    const glm::vec3& axis()  const { return m_axis; }
-    float            angle() const { return m_angle; }
-
-    glm::mat4 localMatrix() const override;
+    // 增量旋转走 base 的 rotate()/rotateWorld()（四元数复合，无死锁）
+    // 兼容旧欧拉入口
+    void setAxis(const Eigen::Vector3f& axis)    { m_lastAxis = axis; }
+    void setAngle(float angleRadians)            { setAxisAngle(m_lastAxis, angleRadians); }
 
 private:
-    glm::vec3 m_axis{ 0.0f, 0.0f, 1.0f };
-    float     m_angle = 0.0f;
+    Eigen::Vector3f m_lastAxis{ Eigen::Vector3f::UnitZ() };   // setAngle 单独调用时的轴
 };
 
-// 纯缩放：localMatrix = S（position/rotation 分量被忽略）
+// 缩放节点：非均匀/均匀缩放便捷入口
 class YALN_CORE_EXPORT YalnScaleNode : public YalnNode
 {
 public:
@@ -208,22 +227,18 @@ public:
     Type nodeType() const override { return Type::Scale; }
 
     // 非均匀缩放；uniform 便捷入口
-    void setScaleFactor(const glm::vec3& factor) { m_scaleFactor = factor; }
-    void setUniformScale(float factor)           { m_scaleFactor = glm::vec3(factor); }
+    void setScaleFactor(const Eigen::Vector3f& factor) { setScale(factor); }
+    void setUniformScale(float factor)                 { setScale(Eigen::Vector3f::Constant(factor)); }
 
-    const glm::vec3& scaleFactor() const { return m_scaleFactor; }
-
-    glm::mat4 localMatrix() const override;
-
-private:
-    glm::vec3 m_scaleFactor{ 1.0f, 1.0f, 1.0f };
+    const Eigen::Vector3f& scaleFactor() const { return scale(); }
 };
 
 // ============================================================================
-//  YalnSpinNode —— 自旋动画节点：绕轴持续旋转
+//  YalnSpinNode —— 自旋动画节点：绕轴持续旋转（四元数按 dt 累乘）
 //
-//  适合风车叶轮、装饰物等持续动画。时间由内部稳定时钟驱动
-//  （每帧 updateWorld 时累加 dt），暂停/恢复/复位/调速随时可调。
+//  适合风车叶轮、装饰物等持续动画。时间由内部稳定时钟驱动。
+//  四元数累乘不经过欧拉角，连续自旋不存在姿态翻转或死区。
+//  挂点高度等用 setPosition 设置（localMatrix 统一 T·R·S）。
 // ============================================================================
 class YALN_CORE_EXPORT YalnSpinNode : public YalnNode
 {
@@ -233,41 +248,41 @@ public:
 
     Type nodeType() const override { return Type::Spin; }
 
-    void setAxis(const glm::vec3& axis)
+    void setAxis(const Eigen::Vector3f& axis) // 自旋轴（自动归一化）
     {
-        const float len = glm::length(axis);
-        m_axis = len > 1e-6f ? axis / len : glm::vec3(0.0f, 0.0f, 1.0f);
+        const float len = axis.norm();
+        m_axis = len > 1e-6f ? Eigen::Vector3f(axis / len) : Eigen::Vector3f::UnitZ();
     }
     void setSpeed(float radiansPerSecond)     { m_speed = radiansPerSecond; }
     void setEnabled(bool enabled)             { m_enabled = enabled; }   // false = 暂停
-    void reset()                              { m_angle = 0.0f; m_lastTime.reset(); }
-    void setAngle(float angleRadians)         { m_angle = angleRadians; }
+    void reset()                              { setOrientation(Eigen::Quaternionf::Identity()); m_lastTime.reset(); }
+    void setOrientationAngle(float angleRadians)  // 直接设定当前累计角度
+    {
+        setOrientation(axisAngleToQuat(m_axis, angleRadians));
+    }
+    float angle() const   // 从四元数反解当前累计角度（绕轴的有符号角）
+    {
+        return 2.0f * std::atan2(
+            m_orientation.dot(Eigen::Quaternionf(0.0f, m_axis.x(), m_axis.y(), m_axis.z())),
+            m_orientation.w());
+    }
 
-    const glm::vec3& axis() const { return m_axis; }
+    const Eigen::Vector3f& axis() const { return m_axis; }
     float speed()         const { return m_speed; }
     bool  isEnabled()     const { return m_enabled; }
-    float angle()         const { return m_angle; }
-
-    glm::mat4 localMatrix() const override;
 
     void updateWorld(const glm::mat4& parentWorld, const glm::vec3& cameraPosition) override;
 
 private:
-    glm::vec3 m_axis{ 0.0f, 0.0f, 1.0f };
-    float     m_speed   = glm::radians(90.0f);   // 默认每秒 90°
+    Eigen::Vector3f m_axis{ Eigen::Vector3f::UnitZ() };
+    float     m_speed   = 1.5707963f;   // 默认每秒 90°
     bool      m_enabled = true;
-    float     m_angle   = 0.0f;
 
     std::optional<std::chrono::steady_clock::time_point> m_lastTime;
 };
 
 // ============================================================================
 //  YalnSwitchNode —— 开关节点：多个子节点只激活一个
-//
-//  经典场景图节点（多状态/多方案切换，如 LOD、日夜、装备变体）。
-//  updateWorld 与 collectInstances 都只遍历激活的子节点——
-//  未激活子树零开销（不更新矩阵、不产生绘制项）。
-//  自身仍可挂绘制项（激活态下的公共部分）。
 // ============================================================================
 class YALN_CORE_EXPORT YalnSwitchNode : public YalnNode
 {
@@ -292,9 +307,8 @@ private:
 // ============================================================================
 //  YalnBillboardNode —— 圆柱公告板节点：绕 Z 轴转向相机
 //
-//  Z 轴向上约定下做"水平朝向"的公告板（标记牌、树冠、粒子片）：
-//  每帧根据相机水平方位绕 Z 轴旋转。绘制几何需要法线朝 +X 的薄片
-//  （如 YalnCube(0.05, w, h)），旋转后薄片正面正对相机。
+//  每帧根据相机水平方位角组装朝向（轴角→四元数）。
+//  绘制几何需要法线朝 +X 的薄片（如 YalnCube(0.05, w, h)）。
 // ============================================================================
 class YALN_CORE_EXPORT YalnBillboardNode : public YalnNode
 {

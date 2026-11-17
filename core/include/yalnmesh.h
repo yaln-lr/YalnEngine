@@ -73,14 +73,19 @@ protected:
 class YALN_CORE_EXPORT YalnCube : public YalnStaticMesh
 {
 public:
-    YalnCube(float l = 1.0f, float w = 1.0f, float h = 1.0f);
+    // 立方体网格。轴向约定（Z 轴向上）：l → X（长），w → Y（宽/深），h → Z（高）
+    // color：实色填充；负分量（默认）表示使用经典彩虹顶点色
+    YalnCube(float l = 1.0f, float w = 1.0f, float h = 1.0f,
+             const glm::vec3& color = glm::vec3(-1.0f));
 };
 
 // 球体网格类
 class YALN_CORE_EXPORT YalnSphere : public YalnStaticMesh
 {
 public:
-    YalnSphere(float radius = 0.5f, int segments = 32);
+    // color：实色填充；负分量（默认）表示使用法线渐变顶点色
+    YalnSphere(float radius = 0.5f, int segments = 32,
+               const glm::vec3& color = glm::vec3(-1.0f));
 
     float getRadius() const { return m_radius; }
     int getSegments() const { return m_segments; }
@@ -94,7 +99,9 @@ private:
 class YALN_CORE_EXPORT YalnPyramid : public YalnStaticMesh
 {
 public:
-    YalnPyramid(float w = 1.0f, float l = 1.0f, float h = 1.0f);
+    // color：实色填充；负分量（默认）表示使用经典暖色渐变顶点色
+    YalnPyramid(float w = 1.0f, float l = 1.0f, float h = 1.0f,
+                const glm::vec3& color = glm::vec3(-1.0f));
 };
 
 #endif // YALN_MESH_H

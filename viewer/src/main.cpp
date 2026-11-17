@@ -18,6 +18,7 @@
 #include "yalnscene.h"
 #include "yalnnode.h"
 #include "yalndrawable.h"
+#include "yalnmath.h"
 
 int main(int argc, char *argv[])
 {
@@ -162,132 +163,447 @@ int main(int argc, char *argv[])
     // 设置相机（俯瞰整个村庄）
     float aspect = 1280.0f / 800.0f;
     YalnPerspectiveCameraPtr camera(new YalnPerspectiveCamera(45.0f, aspect, 0.1f, 100.0f));
-    camera->setPosition(glm::vec3(6.5f, -7.0f, 5.0f));
-    camera->setTarget(glm::vec3(0.0f, 0.0f, 0.6f));
+    camera->setPosition(glm::vec3(16.0f, -18.0f, 14.0f));
+    camera->setTarget(glm::vec3(0.0f, 0.0f, 1.0f));
     viewer->setCameta(camera);
 
-    // ==================== 场景树：3 栋房子 + 完整地面 ====================
+    // ==================== 场景树：村庄（多面墙房子 + 门 + 窗 + 路 + 树 + 风车）====================
     //
-    // Root（组节点）
-    //  ├─ ground（叶子节点）        ── 完整地面（整块薄板）
-    //  ├─ house1（组节点，位置/旋转/缩放）
-    //  │    ├─ walls（叶子节点）    ── 墙体绘制项
-    //  │    └─ roof（叶子节点）     ── 屋顶绘制项
-    //  ├─ house2 ...
-    //  └─ house3 ...
-    //
-    // 三栋房子共享同一份墙体/屋顶网格 → GPU 侧只有 3 份缓冲（地面/墙/屋顶），
-    // 每栋房子靠节点变换实现不同位置、朝向与大小。
+    // 房子由多面墙拼成（前/后/左右四面墙 + 门 + 四扇窗 + 屋顶），
+    // 门/窗略微凸出墙面避免与墙共面闪烁；树 = 树干 + 双层球冠；
+    // 路 = 两条略高于地面的灰色板。所有房子/树共享网格，GPU 缓冲去重。
 
-    // 网格资源（栈上分配，生命周期覆盖整个渲染循环）
-    YalnCube    groundMesh(14.0f, 14.0f, 0.2f);    // 完整地面：整块薄板
-    YalnCube    wallMesh(2.0f, 2.0f, 1.2f);        // 共享墙体
-    YalnPyramid roofMesh(2.8f, 2.8f, 0.9f);        // 共享屋顶（四棱锥）
-    YalnCube    poleMesh(0.25f, 0.25f, 2.2f);      // 风车杆
-    YalnCube    bladeMesh(2.2f, 0.2f, 0.3f);       // 风车叶（十字双叶用同一网格两次自旋 90°? 简化：单叶双份对置）
-    YalnCube    bladeMesh2(0.2f, 2.2f, 0.3f);      // 风车叶（另一方向）
-    YalnCube    markerMesh(0.06f, 1.2f, 0.8f);     // 公告板薄片（法线朝 +X）
-    YalnCube    flatRoofMesh(2.4f, 2.4f, 0.25f);   // 平顶屋顶备选
-    YalnSphere  rockMesh(0.45f, 24);               // 岩石
+    // ---- 网格资源（栈上分配，生命周期覆盖整个渲染循环）----
+    // 配色：自然村庄色板（低饱和大地色系，同类物体色相一致，仅叶轮/屋顶用少量强调色）
+    YalnCube    groundMesh(40.0f, 40.0f, 0.2f, glm::vec3(0.42f, 0.55f, 0.33f));   // 草地（柔和草绿）
+    // 水系与地形
+    YalnCube    lakeCenterMesh(13.0f, 13.0f, 0.03f, glm::vec3(0.30f, 0.48f, 0.62f));  // 湖心盘（湖蓝）
+    YalnCube    lakeSegMesh(14.0f, 7.0f, 0.03f, glm::vec3(0.30f, 0.48f, 0.62f));      // 湖缘弧段：多角度旋转叠出近似圆形湖岸
+    YalnCube    riverMesh(5.5f, 2.2f, 0.03f, glm::vec3(0.34f, 0.52f, 0.66f));     // 河段（略浅）
+    YalnCube    bridgeMesh(1.6f, 2.8f, 0.08f, glm::vec3(0.50f, 0.36f, 0.24f));    // 桥面（木色）
+    YalnCube    bridgePostMesh(0.14f, 0.14f, 0.5f, glm::vec3(0.42f, 0.30f, 0.20f));
+    YalnPyramid mountainMesh(5.0f, 5.0f, 3.2f, glm::vec3(0.47f, 0.46f, 0.43f));   // 山体（灰岩）
+    YalnPyramid snowCapMesh(2.0f, 2.0f, 1.3f, glm::vec3(0.94f, 0.95f, 0.97f));    // 雪帽
+    // 电力设施
+    YalnCube    ppoleMesh(0.12f, 0.12f, 2.0f, glm::vec3(0.38f, 0.30f, 0.22f));    // 电线杆（深木棕）
+    YalnCube    crossarmMesh(0.08f, 0.9f, 0.08f, glm::vec3(0.38f, 0.30f, 0.22f)); // 横担
+    YalnCube    wireMesh(7.0f, 0.025f, 0.025f, glm::vec3(0.22f, 0.22f, 0.24f));   // 电线（深灰，跨 7m 杆距）
+    // 植被
+    YalnSphere  bushMesh(0.22f, 12, glm::vec3(0.30f, 0.44f, 0.24f));              // 灌木（暗绿）
+    YalnSphere  bushMesh2(0.16f, 10, glm::vec3(0.34f, 0.48f, 0.27f));             // 小灌木
+    YalnSphere  rockSmallMesh(0.2f, 10, glm::vec3(0.50f, 0.49f, 0.47f));          // 小石头
+    // 房子部件（三栋共享）
+    YalnCube    wallFrontMesh(2.4f, 0.15f, 1.6f, glm::vec3(0.91f, 0.87f, 0.78f)); // 前/后墙（米白）
+    YalnCube    wallSideMesh(0.15f, 1.7f, 1.6f, glm::vec3(0.86f, 0.81f, 0.70f));  // 左/右墙（阴影侧略深）
+    YalnPyramid roofMesh(2.8f, 2.5f, 0.8f, glm::vec3(0.68f, 0.38f, 0.30f));       // 尖顶（陶土红）
+    YalnCube    flatRoofMesh(2.6f, 2.3f, 0.25f, glm::vec3(0.45f, 0.40f, 0.36f));  // 平顶（深灰棕）
+    YalnCube    doorMesh(0.7f, 0.10f, 1.3f, glm::vec3(0.40f, 0.28f, 0.18f));      // 门（深棕）
+    YalnCube    windowMeshF(0.6f, 0.10f, 0.5f, glm::vec3(0.58f, 0.72f, 0.82f));   // 前/后墙窗（柔天蓝）
+    YalnCube    windowMeshS(0.10f, 0.6f, 0.5f, glm::vec3(0.58f, 0.72f, 0.82f));   // 侧墙窗
+    // 风车
+    YalnCube    poleMesh(0.25f, 0.25f, 2.2f, glm::vec3(0.48f, 0.48f, 0.50f));     // 杆（深灰）
+    YalnCube    bladeMesh(2.2f, 0.2f, 0.3f, glm::vec3(0.93f, 0.92f, 0.90f));      // 横叶（暖白，沿 X）
+    YalnCube    bladeMesh2(0.3f, 0.2f, 2.2f, glm::vec3(0.72f, 0.38f, 0.32f));     // 竖叶（砖红强调，沿 Z）
+    YalnCube    markerMesh(0.06f, 1.2f, 0.8f, glm::vec3(0.93f, 0.92f, 0.90f));    // 公告板（暖白）
+    // 路
+    YalnCube    roadMeshNS(1.6f, 32.0f, 0.04f, glm::vec3(0.45f, 0.45f, 0.47f));   // 南北向（沥青灰）
+    YalnCube    roadMeshEW(38.0f, 1.6f, 0.04f, glm::vec3(0.48f, 0.48f, 0.50f));   // 东西向（略浅）
+    // 树（共享树干/树冠）
+    YalnCube    trunkMesh(0.18f, 0.18f, 0.8f, glm::vec3(0.42f, 0.33f, 0.24f));    // 树干（灰棕）
+    YalnSphere  canopyMeshA(0.52f, 20, glm::vec3(0.34f, 0.47f, 0.28f));           // 下层树冠（暗绿）
+    YalnSphere  canopyMeshB(0.38f, 16, glm::vec3(0.40f, 0.53f, 0.32f));           // 上层树冠（受光绿）
+    // 岩石
+    YalnSphere  rockMesh(0.45f, 24, glm::vec3(0.52f, 0.51f, 0.49f));              // 岩石（石灰岩灰）
 
     IYalnScene& scene = viewer->scene();
     YalnNode* root = scene.root();
 
+    // ---- 可复用子树工厂：树 = 树干 + 双层球冠 ----
+    auto makeTree = [&trunkMesh, &canopyMeshA, &canopyMeshB](const std::string& name, float scale) {
+        auto tree = std::make_unique<YalnGroupNode>(name);
+        tree->setScale(Eigen::Vector3f::Constant(scale));
+
+        auto trunk = std::make_unique<YalnLeafNode>(name + ".trunk");
+        auto trunkDrawable = std::make_unique<YalnMeshDrawable>(&trunkMesh);
+        trunkDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 0.4f));
+        trunk->attachDrawable(std::move(trunkDrawable));
+
+        auto canopyA = std::make_unique<YalnLeafNode>(name + ".canopyA");
+        auto canopyADrawable = std::make_unique<YalnMeshDrawable>(&canopyMeshA);
+        canopyADrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 1.15f));
+        canopyA->attachDrawable(std::move(canopyADrawable));
+
+        auto canopyB = std::make_unique<YalnLeafNode>(name + ".canopyB");
+        auto canopyBDrawable = std::make_unique<YalnMeshDrawable>(&canopyMeshB);
+        canopyBDrawable->setPosition(Eigen::Vector3f(0.12f, -0.08f, 1.5f));
+        canopyB->attachDrawable(std::move(canopyBDrawable));
+
+        tree->addChild(std::move(trunk));
+        tree->addChild(std::move(canopyA));
+        tree->addChild(std::move(canopyB));
+        return tree;
+    };
+
+    // ---- 可复用子树工厂：房子 = 四面墙 + 门 + 四扇窗 + 屋顶 ----
+    // 占地 2.4×2.0，墙厚 0.15，墙高 1.6；门窗嵌入墙面并凸出约 0.03 防共面闪烁
+    auto makeHouse = [&wallFrontMesh, &wallSideMesh, &doorMesh, &windowMeshF, &windowMeshS,
+                      &roofMesh, &flatRoofMesh](const std::string& name, bool withFlatRoofOption) {
+        auto house = std::make_unique<YalnGroupNode>(name);
+        constexpr float kWallH = 1.6f;
+
+        auto addLeaf = [&house](const std::string& leafName, YalnMesh* mesh,
+                                const Eigen::Vector3f& pos) {
+            auto leaf = std::make_unique<YalnLeafNode>(leafName);
+            auto d = std::make_unique<YalnMeshDrawable>(mesh);
+            d->setPosition(pos);
+            leaf->attachDrawable(std::move(d));
+            house->addChild(std::move(leaf));
+        };
+
+        // 四面墙
+        addLeaf(name + ".wallF", &wallFrontMesh, Eigen::Vector3f( 0.0f,  -0.925f, kWallH * 0.5f));
+        addLeaf(name + ".wallB", &wallFrontMesh, Eigen::Vector3f( 0.0f,   0.925f, kWallH * 0.5f));
+        addLeaf(name + ".wallL", &wallSideMesh,  Eigen::Vector3f(-1.125f,  0.0f,  kWallH * 0.5f));
+        addLeaf(name + ".wallR", &wallSideMesh,  Eigen::Vector3f( 1.125f,  0.0f,  kWallH * 0.5f));
+
+        // 门（前墙右半侧，底边贴地）
+        addLeaf(name + ".door",  &doorMesh,    Eigen::Vector3f( 0.55f, -0.98f, 0.65f));
+        // 前/后墙窗（左半侧）
+        addLeaf(name + ".winF",  &windowMeshF, Eigen::Vector3f(-0.55f, -0.98f, 1.0f));
+        addLeaf(name + ".winB",  &windowMeshF, Eigen::Vector3f(-0.55f,  0.98f, 1.0f));
+        // 左/右侧墙窗
+        addLeaf(name + ".winL",  &windowMeshS, Eigen::Vector3f(-1.16f,  0.0f,  1.0f));
+        addLeaf(name + ".winR",  &windowMeshS, Eigen::Vector3f( 1.16f,  0.0f,  1.0f));
+
+        // 屋顶：底面精确落在墙顶 z=1.6（金字塔半高 0.4 → 挂点 z=2.0）
+        std::unique_ptr<YalnNode> roof;
+        if (withFlatRoofOption)
+        {
+            auto roofSwitch = std::make_unique<YalnSwitchNode>(name + ".roofStyle");
+
+            auto roofPyramid = std::make_unique<YalnLeafNode>(name + ".roofPyramid");
+            auto pyramidDrawable = std::make_unique<YalnMeshDrawable>(&roofMesh);
+            pyramidDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 2.0f));
+            roofPyramid->attachDrawable(std::move(pyramidDrawable));
+
+            auto roofFlat = std::make_unique<YalnLeafNode>(name + ".roofFlat");
+            auto flatDrawable = std::make_unique<YalnMeshDrawable>(&flatRoofMesh);
+            flatDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 1.725f));   // 平顶盖 [1.6, 1.85]
+            roofFlat->attachDrawable(std::move(flatDrawable));
+
+            roofSwitch->addChild(std::move(roofPyramid));
+            roofSwitch->addChild(std::move(roofFlat));
+            roofSwitch->setActiveChild(name + ".roofPyramid");
+            roof = std::move(roofSwitch);
+        }
+        else
+        {
+            auto roofLeaf = std::make_unique<YalnLeafNode>(name + ".roof");
+            auto roofDrawable = std::make_unique<YalnMeshDrawable>(&roofMesh);
+            roofDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 2.0f));
+            roofLeaf->attachDrawable(std::move(roofDrawable));
+            roof = std::move(roofLeaf);
+        }
+        house->addChild(std::move(roof));
+        return house;
+    };
+
     // ---- 地面（叶子节点只能包含可绘制对象）----
     auto groundNode = std::make_unique<YalnLeafNode>("ground");
     auto groundDrawable = std::make_unique<YalnMeshDrawable>(&groundMesh);
-    groundDrawable->setPosition(glm::vec3(0.0f, 0.0f, -0.1f));   // 顶面抬到 z=0
+    groundDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, -0.1f));   // 顶面抬到 z=0
     groundNode->attachDrawable(std::move(groundDrawable));
     root->addChild(std::move(groundNode));
 
-    // ---- 三栋房子（组节点组织，墙体/屋顶是叶子节点）----
+    // ---- 路：十字路（略高于草地，避免共面）----
+    {
+        auto roadNS = std::make_unique<YalnLeafNode>("road.ns");
+        auto roadNSDrawable = std::make_unique<YalnMeshDrawable>(&roadMeshNS);
+        roadNSDrawable->setPosition(Eigen::Vector3f(-2.0f, -3.5f, 0.025f));
+        roadNS->attachDrawable(std::move(roadNSDrawable));
+        root->addChild(std::move(roadNS));
+
+        auto roadEW = std::make_unique<YalnLeafNode>("road.ew");
+        auto roadEWDrawable = std::make_unique<YalnMeshDrawable>(&roadMeshEW);
+        roadEWDrawable->setPosition(Eigen::Vector3f(0.0f, 1.0f, 0.025f));
+        roadEW->attachDrawable(std::move(roadEWDrawable));
+        root->addChild(std::move(roadEW));
+    }
+
+    // ---- 水系：蜿蜒河流（自西向东入湖）+ 弧形湖岸的湖 + 过路木桥 ----
+    // 湖岸：湖心盘 + 6 条以湖心为轴每 30° 旋转的矩形弧段，叠合出近似圆形边缘
+    {
+        const std::pair<Eigen::Vector3f, float> riverSpans[] = {
+            { Eigen::Vector3f(-16.5f, -8.0f, 0.02f), glm::radians(  8.0f) },
+            { Eigen::Vector3f(-11.5f, -8.6f, 0.02f), glm::radians(-10.0f) },
+            { Eigen::Vector3f( -6.5f, -8.2f, 0.02f), glm::radians(  6.0f) },
+            { Eigen::Vector3f( -2.0f, -8.8f, 0.02f), glm::radians( -6.0f) },
+            { Eigen::Vector3f(  1.5f, -9.0f, 0.02f), glm::radians(  0.0f) },
+        };
+        for (size_t i = 0; i < std::size(riverSpans); i++)
+        {
+            auto seg = std::make_unique<YalnLeafNode>("river" + std::to_string(i + 1));
+            auto segDrawable = std::make_unique<YalnMeshDrawable>(&riverMesh);
+            segDrawable->setPosition(riverSpans[i].first);
+            seg->attachDrawable(std::move(segDrawable));
+            seg->setEulerRotation(Eigen::Vector3f(0.0f, 0.0f, riverSpans[i].second));
+            root->addChild(std::move(seg));
+        }
+
+        // 湖：中心 (8, -9)，近似圆形，半径约 7.5
+        const Eigen::Vector3f lakeCenter(8.0f, -9.0f, 0.02f);
+        auto lakeBody = std::make_unique<YalnGroupNode>("lake");
+        auto lakeCenterNode = std::make_unique<YalnLeafNode>("lake.center");
+        auto lakeCenterDrawable = std::make_unique<YalnMeshDrawable>(&lakeCenterMesh);
+        lakeCenterDrawable->setPosition(lakeCenter);
+        lakeCenterNode->attachDrawable(std::move(lakeCenterDrawable));
+        lakeBody->addChild(std::move(lakeCenterNode));
+
+        for (int i = 0; i < 6; i++)
+        {
+            auto seg = std::make_unique<YalnLeafNode>("lake.seg" + std::to_string(i + 1));
+            auto segDrawable = std::make_unique<YalnMeshDrawable>(&lakeSegMesh);
+            segDrawable->setPosition(lakeCenter);
+            seg->attachDrawable(std::move(segDrawable));
+            seg->setEulerRotation(Eigen::Vector3f(0.0f, 0.0f, glm::radians(30.0f * i)));
+            lakeBody->addChild(std::move(seg));
+        }
+        root->addChild(std::move(lakeBody));
+
+        // 木桥：南北路跨河处，桥面高于路面，四根桥墩
+        auto bridge = std::make_unique<YalnGroupNode>("bridge");
+        bridge->setPosition(Eigen::Vector3f(-2.0f, -8.8f, 0.06f));
+
+        auto deck = std::make_unique<YalnLeafNode>("bridge.deck");
+        auto deckDrawable = std::make_unique<YalnMeshDrawable>(&bridgeMesh);
+        deck->attachDrawable(std::move(deckDrawable));
+        bridge->addChild(std::move(deck));
+
+        const Eigen::Vector3f postOffsets[] = {
+            Eigen::Vector3f(-0.70f, -1.30f, 0.19f), Eigen::Vector3f(0.70f, -1.30f, 0.19f),
+            Eigen::Vector3f(-0.70f,  1.30f, 0.19f), Eigen::Vector3f(0.70f,  1.30f, 0.19f),
+        };
+        for (size_t i = 0; i < std::size(postOffsets); i++)
+        {
+            auto post = std::make_unique<YalnLeafNode>("bridge.post" + std::to_string(i + 1));
+            auto postDrawable = std::make_unique<YalnMeshDrawable>(&bridgePostMesh);
+            postDrawable->setPosition(postOffsets[i]);
+            post->attachDrawable(std::move(postDrawable));
+            bridge->addChild(std::move(post));
+        }
+        root->addChild(std::move(bridge));
+    }
+
+    // ---- 十五栋房子（40×40 大地图上疏散分布；全部核算过与湖/河/路的间距，无压水）----
     struct HouseSpec {
-        glm::vec3 position;
-        float     rotationZ;   // 弧度
-        float     scale;
+        Eigen::Vector3f position;
+        float           rotationZ;   // 弧度
+        float           scale;
     };
     const HouseSpec houses[] = {
-        { glm::vec3(-3.0f, -2.0f, 0.0f), glm::radians( 15.0f), 1.0f },
-        { glm::vec3( 2.5f,  2.0f, 0.0f), glm::radians(-25.0f), 0.8f },
-        { glm::vec3( 3.0f, -2.5f, 0.0f), glm::radians( 50.0f), 1.2f },
+        // 河北岸村庄（南北路西侧）
+        { Eigen::Vector3f( -5.0f,  -4.0f, 0.0f), glm::radians( 15.0f), 1.00f },  // house1
+        { Eigen::Vector3f( -8.0f,  -1.5f, 0.0f), glm::radians(-20.0f), 0.90f },  // house2（平顶开关）
+        { Eigen::Vector3f( -5.5f,   4.0f, 0.0f), glm::radians( 10.0f), 1.10f },  // house3
+        // 南北路东侧
+        { Eigen::Vector3f(  1.0f,  -3.5f, 0.0f), glm::radians(-30.0f), 0.85f },  // house4
+        { Eigen::Vector3f(  2.0f,   3.5f, 0.0f), glm::radians(  5.0f), 0.95f },  // house5
+        // 东西路沿线
+        { Eigen::Vector3f(  5.5f,   2.8f, 0.0f), glm::radians(-25.0f), 0.80f },  // house6
+        { Eigen::Vector3f(  8.5f,   4.5f, 0.0f), glm::radians( 15.0f), 1.05f },  // house7
+        { Eigen::Vector3f(  4.5f,   7.5f, 0.0f), glm::radians( 30.0f), 0.90f },  // house8
+        { Eigen::Vector3f(-10.0f,   6.5f, 0.0f), glm::radians(-10.0f), 1.00f },  // house9（山脚）
+        { Eigen::Vector3f( 12.0f,   7.0f, 0.0f), glm::radians( 20.0f), 0.95f },  // house10（山脚）
+        // 湖北岸（湖心 (8,-9)，半径约 7.5，以下均留出岸线距离）
+        { Eigen::Vector3f(  5.5f,  -1.0f, 0.0f), glm::radians( 40.0f), 1.10f },  // house11
+        { Eigen::Vector3f( 13.5f,  -1.5f, 0.0f), glm::radians(-15.0f), 0.90f },  // house12
+        { Eigen::Vector3f( 16.5f,   4.0f, 0.0f), glm::radians( 10.0f), 0.85f },  // house13
+        // 西侧散居
+        { Eigen::Vector3f(-14.0f,  -3.0f, 0.0f), glm::radians(-40.0f), 1.00f },  // house14
+        { Eigen::Vector3f(-16.0f,   3.0f, 0.0f), glm::radians(-30.0f), 0.90f },  // house15
     };
 
     int houseIndex = 1;
     for (const HouseSpec& spec : houses)
     {
-        const std::string base = "house" + std::to_string(houseIndex++);
-
-        auto house = std::make_unique<YalnGroupNode>(base);
+        auto house = makeHouse("house" + std::to_string(houseIndex), houseIndex == 2);
         house->setPosition(spec.position);
-        house->setRotation(glm::vec3(0.0f, 0.0f, spec.rotationZ));
-        house->setScale(glm::vec3(spec.scale, spec.scale, spec.scale));
-
-        // 墙体（本地偏移：墙体网格中心在原点，抬高半高使底面贴地）
-        auto walls = std::make_unique<YalnLeafNode>(base + ".walls");
-        auto wallDrawable = std::make_unique<YalnMeshDrawable>(&wallMesh);
-        wallDrawable->setPosition(glm::vec3(0.0f, 0.0f, 0.6f));
-        walls->attachDrawable(std::move(wallDrawable));
-
-        // 屋顶：第 2 栋（house2）用开关节点提供两种屋顶方案（默认尖顶，可切平顶）
-        std::unique_ptr<YalnNode> roof;
-        if (houseIndex == 3)   // houseIndex 在本轮开头已自增：house2 对应值 3
-        {
-            auto roofSwitch = std::make_unique<YalnSwitchNode>(base + ".roofStyle");
-
-            auto roofPyramid = std::make_unique<YalnLeafNode>(base + ".roofPyramid");
-            auto pyramidDrawable = std::make_unique<YalnMeshDrawable>(&roofMesh);
-            pyramidDrawable->setPosition(glm::vec3(0.0f, 0.0f, 1.65f));
-            roofPyramid->attachDrawable(std::move(pyramidDrawable));
-
-            auto roofFlat = std::make_unique<YalnLeafNode>(base + ".roofFlat");
-            auto flatDrawable = std::make_unique<YalnMeshDrawable>(&flatRoofMesh);
-            flatDrawable->setPosition(glm::vec3(0.0f, 0.0f, 1.325f));
-            roofFlat->attachDrawable(std::move(flatDrawable));
-
-            roofSwitch->addChild(std::move(roofPyramid));
-            roofSwitch->addChild(std::move(roofFlat));
-            roofSwitch->setActiveChild(base + ".roofPyramid");
-            roof = std::move(roofSwitch);
-        }
-        else
-        {
-            auto roofLeaf = std::make_unique<YalnLeafNode>(base + ".roof");
-            auto roofDrawable = std::make_unique<YalnMeshDrawable>(&roofMesh);
-            roofDrawable->setPosition(glm::vec3(0.0f, 0.0f, 1.65f));
-            roofLeaf->attachDrawable(std::move(roofDrawable));
-            roof = std::move(roofLeaf);
-        }
-
-        house->addChild(std::move(walls));
-        house->addChild(std::move(roof));
+        house->setEulerRotation(Eigen::Vector3f(0.0f, 0.0f, spec.rotationZ));   // 内部转四元数
+        house->setScale(Eigen::Vector3f::Constant(spec.scale));
         root->addChild(std::move(house));
+        houseIndex++;
+    }
+
+    // ---- 山脉（北缘与东缘，金字塔体 + 雪顶扣峰）----
+    auto makeMountain = [&mountainMesh, &snowCapMesh](const std::string& name,
+                                                      const Eigen::Vector3f& pos, float scale) {
+        auto m = std::make_unique<YalnGroupNode>(name);
+        m->setPosition(pos);
+        m->setScale(Eigen::Vector3f::Constant(scale));
+
+        auto body = std::make_unique<YalnLeafNode>(name + ".body");
+        auto bodyDrawable = std::make_unique<YalnMeshDrawable>(&mountainMesh);
+        bodyDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 1.6f));    // 底面贴地
+        body->attachDrawable(std::move(bodyDrawable));
+
+        auto snow = std::make_unique<YalnLeafNode>(name + ".snow");
+        auto snowDrawable = std::make_unique<YalnMeshDrawable>(&snowCapMesh);
+        snowDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 2.55f));   // 雪帽扣住峰顶
+        snow->attachDrawable(std::move(snowDrawable));
+
+        m->addChild(std::move(body));
+        m->addChild(std::move(snow));
+        return m;
+    };
+    {
+        const std::pair<Eigen::Vector3f, float> mountains[] = {
+            { Eigen::Vector3f(-10.0f, 17.5f, 0.0f), 1.60f },
+            { Eigen::Vector3f(  2.0f, 18.5f, 0.0f), 2.00f },
+            { Eigen::Vector3f( 13.0f, 17.0f, 0.0f), 1.50f },
+            { Eigen::Vector3f(-18.0f, 12.0f, 0.0f), 1.20f },
+            { Eigen::Vector3f( 18.5f, 11.0f, 0.0f), 1.30f },
+            { Eigen::Vector3f( 18.0f, 18.0f, 0.0f), 1.00f },
+        };
+        for (size_t i = 0; i < std::size(mountains); i++)
+        {
+            auto m = makeMountain("mountain" + std::to_string(i + 1),
+                                  mountains[i].first, mountains[i].second);
+            root->addChild(std::move(m));
+        }
+    }
+
+    // ---- 八棵树（路旁、山脚、湖畔）----
+    const std::pair<Eigen::Vector3f, float> trees[] = {
+        { Eigen::Vector3f(-13.0f,  -6.5f, 0.0f), 1.1f },
+        { Eigen::Vector3f(-18.0f,   0.0f, 0.0f), 1.0f },
+        { Eigen::Vector3f(-18.0f,   8.0f, 0.0f), 1.0f },
+        { Eigen::Vector3f( -9.0f,  10.0f, 0.0f), 0.9f },
+        { Eigen::Vector3f( -1.0f,  11.0f, 0.0f), 1.0f },
+        { Eigen::Vector3f(  7.0f,  11.0f, 0.0f), 1.1f },
+        { Eigen::Vector3f( 15.0f,  11.5f, 0.0f), 0.9f },
+        { Eigen::Vector3f( 18.0f,  -1.0f, 0.0f), 0.9f },
+        { Eigen::Vector3f( 11.0f, -17.0f, 0.0f), 1.0f },
+        { Eigen::Vector3f( -6.0f, -13.0f, 0.0f), 1.2f },
+        { Eigen::Vector3f(-12.0f, -12.0f, 0.0f), 1.0f },
+        { Eigen::Vector3f( 17.0f, -14.0f, 0.0f), 0.8f },
+    };
+    for (size_t i = 0; i < std::size(trees); i++)
+    {
+        auto tree = makeTree("tree" + std::to_string(i + 1), trees[i].second);
+        tree->setPosition(trees[i].first);
+        root->addChild(std::move(tree));
+    }
+
+    // ---- 灌木（房前屋后 / 湖畔 / 河岸）----
+    const std::pair<Eigen::Vector3f, float> bushes[] = {
+        { Eigen::Vector3f( -3.5f,  2.2f, 0.0f), 1.0f },
+        { Eigen::Vector3f(  3.2f,  2.6f, 0.0f), 0.8f },
+        { Eigen::Vector3f( -6.5f, -2.0f, 0.0f), 1.0f },
+        { Eigen::Vector3f(  9.5f,  2.8f, 0.0f), 1.0f },
+        { Eigen::Vector3f( 15.5f, -4.5f, 0.0f), 1.0f },
+        { Eigen::Vector3f(  0.5f, -6.0f, 0.0f), 0.7f },
+        { Eigen::Vector3f(-16.0f, -5.5f, 0.0f), 0.8f },
+        { Eigen::Vector3f( -3.0f,-11.0f, 0.0f), 0.9f },
+        { Eigen::Vector3f(  6.8f,  7.8f, 0.0f), 1.0f },
+        { Eigen::Vector3f(-11.0f,  3.5f, 0.0f), 0.8f },
+    };
+    for (size_t i = 0; i < std::size(bushes); i++)
+    {
+        auto bush = std::make_unique<YalnLeafNode>("bush" + std::to_string(i + 1));
+        auto bushDrawable = std::make_unique<YalnMeshDrawable>(i % 2 ? &bushMesh2 : &bushMesh);
+        bushDrawable->setPosition(Eigen::Vector3f(
+            bushes[i].first.x(), bushes[i].first.y(), 0.22f * bushes[i].second));
+        bush->attachDrawable(std::move(bushDrawable));
+        bush->setScale(Eigen::Vector3f::Constant(bushes[i].second));
+        root->addChild(std::move(bush));
+    }
+
+    // ---- 岩石群（河岸 / 湖畔 / 野地）----
+    {
+        const Eigen::Vector3f rockSpots[] = {
+            Eigen::Vector3f( -7.5f,  -6.5f, 0.0f), Eigen::Vector3f( -1.0f, -12.0f, 0.0f),
+            Eigen::Vector3f( 18.0f, -16.0f, 0.0f), Eigen::Vector3f( 17.0f,  -8.5f, 0.0f),
+            Eigen::Vector3f(-14.0f, -14.0f, 0.0f),
+        };
+        const float rockScales[] = { 1.0f, 0.8f, 0.9f, 1.1f, 0.9f };
+        for (size_t i = 0; i < std::size(rockSpots); i++)
+        {
+            auto rock = std::make_unique<YalnLeafNode>("rock." + std::to_string(i + 1));
+            auto rockDrawable = std::make_unique<YalnMeshDrawable>(&rockSmallMesh);
+            rockDrawable->setPosition(Eigen::Vector3f(
+                rockSpots[i].x(), rockSpots[i].y(), 0.2f * rockScales[i]));
+            rock->attachDrawable(std::move(rockDrawable));
+            rock->setScale(Eigen::Vector3f::Constant(rockScales[i]));
+            root->addChild(std::move(rock));
+        }
+    }
+
+    // ---- 电力设施：沿东西路北侧的电线杆（杆 + 横担）与两根电线 ----
+    {
+        const float wireY = 2.4f;
+        const float poleXs[] = { -14.0f, -7.0f, 0.0f, 7.0f, 14.0f };
+        for (size_t i = 0; i < std::size(poleXs); i++)
+        {
+            const std::string base = "pole" + std::to_string(i + 1);
+            auto pole = std::make_unique<YalnGroupNode>(base);
+            pole->setPosition(Eigen::Vector3f(poleXs[i], wireY, 0.0f));
+
+            auto post = std::make_unique<YalnLeafNode>(base + ".post");
+            auto postDrawable = std::make_unique<YalnMeshDrawable>(&ppoleMesh);
+            postDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 1.0f));
+            post->attachDrawable(std::move(postDrawable));
+
+            auto arm = std::make_unique<YalnLeafNode>(base + ".arm");
+            auto armDrawable = std::make_unique<YalnMeshDrawable>(&crossarmMesh);
+            armDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 1.8f));
+            arm->attachDrawable(std::move(armDrawable));
+
+            pole->addChild(std::move(post));
+            pole->addChild(std::move(arm));
+            root->addChild(std::move(pole));
+        }
+        // 电线：相邻电线杆之间两根（横担两端）
+        for (size_t i = 0; i + 1 < std::size(poleXs); i++)
+        {
+            const float cx = (poleXs[i] + poleXs[i + 1]) * 0.5f;
+            for (int s = 0; s < 2; s++)
+            {
+                auto wire = std::make_unique<YalnLeafNode>(
+                    "wire" + std::to_string(i + 1) + "_" + std::to_string(s + 1));
+                auto wireDrawable = std::make_unique<YalnMeshDrawable>(&wireMesh);
+                wireDrawable->setPosition(Eigen::Vector3f(
+                    cx, wireY + (s == 0 ? -0.32f : 0.32f), 1.78f));
+                wire->attachDrawable(std::move(wireDrawable));
+                root->addChild(std::move(wire));
+            }
+        }
     }
 
     // ---- 风车：TranslateNode 定位 + SpinNode 自旋叶轮 ----
     auto windmill = std::make_unique<YalnGroupNode>("windmill");
 
     auto windmillPos = std::make_unique<YalnTranslateNode>("windmill.pos");
-    windmillPos->setOffset(glm::vec3(-0.5f, 3.5f, 0.0f));
+    windmillPos->setOffset(Eigen::Vector3f(-5.5f, 9.5f, 0.0f));
 
     auto windmillBody = std::make_unique<YalnLeafNode>("windmill.base");
     auto poleDrawable = std::make_unique<YalnMeshDrawable>(&poleMesh);
-    poleDrawable->setPosition(glm::vec3(0.0f, 0.0f, 1.1f));
+    poleDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 1.1f));
     windmillBody->attachDrawable(std::move(poleDrawable));
 
     // 叶轮挂在杆顶（z=2.2），绕水平 Y 轴持续自旋，双叶十字布局
     auto rotor = std::make_unique<YalnSpinNode>("windmill.rotor");
-    rotor->setPosition(glm::vec3(0.0f, 0.0f, 2.2f));
-    rotor->setAxis(glm::vec3(0.0f, 1.0f, 0.0f));
+    rotor->setPosition(Eigen::Vector3f(0.0f, 0.0f, 2.2f));
+    rotor->setAxis(Eigen::Vector3f(0.0f, 1.0f, 0.0f));
     rotor->setSpeed(glm::radians(120.0f));
 
     auto bladeA = std::make_unique<YalnLeafNode>("windmill.bladeA");
     auto bladeADrawable = std::make_unique<YalnMeshDrawable>(&bladeMesh);
-    bladeADrawable->setPosition(glm::vec3(0.0f, 0.0f, 0.0f));
+    bladeADrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 0.0f));
     bladeA->attachDrawable(std::move(bladeADrawable));
 
     auto bladeB = std::make_unique<YalnLeafNode>("windmill.bladeB");
     auto bladeBDrawable = std::make_unique<YalnMeshDrawable>(&bladeMesh2);
-    bladeBDrawable->setPosition(glm::vec3(0.0f, 0.0f, 0.0f));
+    bladeBDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 0.0f));
     bladeB->attachDrawable(std::move(bladeBDrawable));
 
     rotor->addChild(std::move(bladeA));
@@ -300,25 +616,24 @@ int main(int argc, char *argv[])
 
     // ---- 公告板标记：始终水平朝向相机的薄片 ----
     auto marker = std::make_unique<YalnBillboardNode>("marker");
-    marker->setPosition(glm::vec3(-0.5f, 3.5f, 3.4f));   // 风车顶部上方
+    marker->setPosition(Eigen::Vector3f(-5.5f, 9.5f, 3.4f));   // 风车顶部上方
     auto markerDrawable = std::make_unique<YalnMeshDrawable>(&markerMesh);
     marker->attachDrawable(std::move(markerDrawable));
     root->addChild(std::move(marker));
 
     // ---- 岩石：变换节点链 位移 → 倾斜 → 缩放 → 网格 ----
     auto rock = std::make_unique<YalnTranslateNode>("rock");
-    rock->setOffset(glm::vec3(4.5f, 0.5f, 0.0f));
+    rock->setOffset(Eigen::Vector3f(14.5f, 10.0f, 0.0f));
 
     auto rockTilt = std::make_unique<YalnRotateNode>("rock.tilt");
-    rockTilt->setAxis(glm::vec3(0.0f, 1.0f, 0.0f));
-    rockTilt->setAngle(glm::radians(-18.0f));
+    rockTilt->setAxisAngle(Eigen::Vector3f(0.0f, 1.0f, 0.0f), glm::radians(-18.0f));
 
     auto rockSize = std::make_unique<YalnScaleNode>("rock.size");
-    rockSize->setScaleFactor(glm::vec3(1.3f, 1.0f, 0.8f));
+    rockSize->setScaleFactor(Eigen::Vector3f(1.3f, 1.0f, 0.8f));
 
     auto rockBody = std::make_unique<YalnLeafNode>("rock.body");
     auto rockDrawable = std::make_unique<YalnMeshDrawable>(&rockMesh);
-    rockDrawable->setPosition(glm::vec3(0.0f, 0.0f, 0.35f));
+    rockDrawable->setPosition(Eigen::Vector3f(0.0f, 0.0f, 0.35f));
     rockBody->attachDrawable(std::move(rockDrawable));
 
     rockSize->addChild(std::move(rockBody));

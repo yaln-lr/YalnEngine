@@ -56,6 +56,7 @@ set(YALN_CORE_HDRS
     ./include/yalnshader.h
     ./include/yalnshaderprogram.h
     ./include/yalninterfaces.h
+    ./include/yalnmath.h             # Eigen 四元数 ↔ glm 桥接
     ./include/yalndrawable.h
     ./include/yalnnode.h
     ./include/yalnmesh.h

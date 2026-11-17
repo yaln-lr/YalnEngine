@@ -48,24 +48,26 @@ void YalnStaticMesh::calculateBounds(glm::vec3& minBounds, glm::vec3& maxBounds)
 // ==================== YalnCube ====================
 
 // 立方体构造函数
-YalnCube::YalnCube(float l, float w, float h) {
+YalnCube::YalnCube(float l, float w, float h, const glm::vec3& color) {
+    // 轴向约定（Z 轴向上）：l → X（长），w → Y（宽/深），h → Z（高）
+    // 顶点分量顺序 (x, y, z)：x=±hl, y=±hw, z=±hh
+    float hl = l * 0.5f;
     float hw = w * 0.5f;
     float hh = h * 0.5f;
-    float hl = l * 0.5f;
 
     // 立方体的8个顶点 (位置 + 颜色)
     std::vector<YalnVertexPC> cubeVertices = {
         // 前面 (Z+)
-        {{-hl, -hh,  hw}, {1.0f, 0.0f, 0.0f}},  // 0
-        {{ hl, -hh,  hw}, {0.0f, 1.0f, 0.0f}},  // 1
-        {{ hl,  hh,  hw}, {0.0f, 0.0f, 1.0f}},  // 2
-        {{-hl,  hh,  hw}, {1.0f, 1.0f, 0.0f}},  // 3
+        {{-hl, -hw,  hh}, {1.0f, 0.0f, 0.0f}},  // 0
+        {{ hl, -hw,  hh}, {0.0f, 1.0f, 0.0f}},  // 1
+        {{ hl,  hw,  hh}, {0.0f, 0.0f, 1.0f}},  // 2
+        {{-hl,  hw,  hh}, {1.0f, 1.0f, 0.0f}},  // 3
 
         // 后面 (Z-)
-        {{ hl, -hh, -hw}, {0.0f, 1.0f, 1.0f}},  // 4
-        {{-hl, -hh, -hw}, {1.0f, 0.0f, 1.0f}},  // 5
-        {{-hl,  hh, -hw}, {1.0f, 1.0f, 1.0f}},  // 6
-        {{ hl,  hh, -hw}, {0.5f, 0.5f, 0.5f}}   // 7
+        {{ hl, -hw, -hh}, {0.0f, 1.0f, 1.0f}},  // 4
+        {{-hl, -hw, -hh}, {1.0f, 0.0f, 1.0f}},  // 5
+        {{-hl,  hw, -hh}, {1.0f, 1.0f, 1.0f}},  // 6
+        {{ hl,  hw, -hh}, {0.5f, 0.5f, 0.5f}}   // 7
     };
 
     // 12个三角形，36个索引
@@ -86,12 +88,18 @@ YalnCube::YalnCube(float l, float w, float h) {
 
     m_vertices = std::move(cubeVertices);
     m_indices  = std::move(cubeIndices);
+
+    // 实色模式：color 任一分量非负时覆盖全部顶点色
+    if (color.r >= 0.0f || color.g >= 0.0f || color.b >= 0.0f)
+    {
+        for (auto& v : m_vertices) { v.color = color; }
+    }
 }
 
 // ==================== YalnPyramid ====================
 
 // 四棱锥：底面矩形（w×l）中心在原点、位于 z=-h/2，顶点在 z=+h/2
-YalnPyramid::YalnPyramid(float w, float l, float h) {
+YalnPyramid::YalnPyramid(float w, float l, float h, const glm::vec3& color) {
     const float hw = w * 0.5f;
     const float hl = l * 0.5f;
     const float hh = h * 0.5f;
@@ -122,12 +130,18 @@ YalnPyramid::YalnPyramid(float w, float l, float h) {
 
     m_vertices = std::move(pyramidVertices);
     m_indices  = std::move(pyramidIndices);
+
+    // 实色模式：color 任一分量非负时覆盖全部顶点色
+    if (color.r >= 0.0f || color.g >= 0.0f || color.b >= 0.0f)
+    {
+        for (auto& v : m_vertices) { v.color = color; }
+    }
 }
 
 // ==================== YalnSphere ====================
 
 // 球体构造函数 (经纬度法)
-YalnSphere::YalnSphere(float radius, int segments)
+YalnSphere::YalnSphere(float radius, int segments, const glm::vec3& color)
     : m_radius(radius), m_segments(segments) {
 
     for (int y = 0; y <= segments; y++) {
@@ -155,6 +169,12 @@ YalnSphere::YalnSphere(float radius, int segments)
 
             m_vertices.push_back({pos, color});
         }
+    }
+
+    // 实色模式：color 任一分量非负时覆盖全部顶点色
+    if (color.r >= 0.0f || color.g >= 0.0f || color.b >= 0.0f)
+    {
+        for (auto& v : m_vertices) { v.color = color; }
     }
 
     // 生成索引

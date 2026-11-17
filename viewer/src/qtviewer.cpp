@@ -118,18 +118,17 @@ void QtViewer::startRenderLoop()
 
 void QtViewer::onFrameTimeout()
 {
-    // 自动旋转
+    // 自动旋转：绕竖直轴 Z 水平公转（引擎 Z 轴向上）
     if (m_autoRotate && camera()) {
         YalnCameraPtr cam = camera();
         glm::vec3 pos = cam->getPosition();
         float angle = m_autoRotateSpeed * 0.016f;
 
-        // 绕 Y 轴旋转
         float cosA = glm::cos(angle);
         float sinA = glm::sin(angle);
-        float x = pos.x * cosA - pos.z * sinA;
-        float z = pos.x * sinA + pos.z * cosA;
-        pos = glm::vec3(x, pos.y, z);
+        float x = pos.x * cosA - pos.y * sinA;
+        float y = pos.x * sinA + pos.y * cosA;
+        pos = glm::vec3(x, y, pos.z);   // 高度 z 不变
 
         cam->setPosition(pos);
     }
@@ -191,12 +190,12 @@ void QtViewer::handleKeyInput(int key, bool pressed)
     glm::vec3 pos = camera()->getPosition();
 
     switch (key) {
-        // WASD：相机位置移动
+        // WASD：水平移动（Z 轴向上，地面为 XY 平面）
         case Qt::Key_W:
-            pos.z -= moveSpeed;
+            pos.y -= moveSpeed;   // 前进（-Y）
             break;
         case Qt::Key_S:
-            pos.z += moveSpeed;
+            pos.y += moveSpeed;   // 后退（+Y）
             break;
         case Qt::Key_A:
             pos.x -= moveSpeed;
@@ -205,10 +204,10 @@ void QtViewer::handleKeyInput(int key, bool pressed)
             pos.x += moveSpeed;
             break;
         case Qt::Key_Q:
-            pos.y -= moveSpeed;
+            pos.z -= moveSpeed;   // 下降
             break;
         case Qt::Key_E:
-            pos.y += moveSpeed;
+            pos.z += moveSpeed;   // 上升
             break;
 
         // +/-：调整相机距离
@@ -268,33 +267,36 @@ void QtViewer::mouseMoveEvent(QMouseEvent* event)
     glm::vec3 target = camera()->getTarget();
 
     if (m_mouseButton == Qt::LeftButton) {
-        // 左键：旋转相机视角（绕目标点）
+        // 左键：旋转相机视角（绕目标点轨道运动，球坐标以竖直轴 Z 为极轴）
         float pitch = deltaY * m_rotationSensitivity;
         float yaw = deltaX * m_rotationSensitivity;
 
-        // 计算当前角度
         glm::vec3 offset = pos - target;
         float radius = glm::length(offset);
+        if (radius < 1e-5f) return;
 
-        // 计算新的方位角和仰角
-        float phi = glm::atan(offset.z, offset.x) + yaw;
-        float theta = glm::acos(offset.y / radius) - pitch;
+        // 方位角绕 Z（水平面内），极角自 +Z 轴量起
+        float phi   = glm::atan(offset.y, offset.x) + yaw;
+        float theta = glm::acos(glm::clamp(offset.z / radius, -1.0f, 1.0f)) - pitch;
 
-        // 限制仰角
+        // 极角限幅：避免视线与竖直轴重合导致 lookAt 退化（标准轨道保护，非万向死锁）
         theta = glm::clamp(theta, 0.1f, glm::pi<float>() - 0.1f);
 
-        // 计算新位置
         offset.x = radius * glm::sin(theta) * glm::cos(phi);
-        offset.y = radius * glm::cos(theta);
-        offset.z = radius * glm::sin(theta) * glm::sin(phi);
+        offset.y = radius * glm::sin(theta) * glm::sin(phi);
+        offset.z = radius * glm::cos(theta);
 
         pos = target + offset;
         camera()->setPosition(pos);
 
     } else if (m_mouseButton == Qt::RightButton) {
-        // 右键：平移相机（沿视平面移动）
+        // 右键：平移相机（沿视平面移动，参考 up 为世界竖直轴 Z）
         glm::vec3 forward = glm::normalize(target - pos);
-        glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 right = glm::cross(forward, glm::vec3(0.0f, 0.0f, 1.0f));
+        if (glm::length(right) < 1e-4f) {
+            right = glm::vec3(0.0f, 1.0f, 0.0f);   // 视线近竖直时兜底
+        }
+        right = glm::normalize(right);
         glm::vec3 up = glm::cross(right, forward);
 
         pos -= right * deltaX * m_panSensitivity * 10.0f;

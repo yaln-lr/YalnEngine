@@ -48,6 +48,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/viewer/include
     ${Vulkan_INCLUDE_DIRS}
     ${GLM_INCLUDE_DIRS}
+    ${EIGEN_INCLUDE_DIRS}
 )
 
 # Vulkan 配置

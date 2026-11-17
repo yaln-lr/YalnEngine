@@ -13,12 +13,8 @@ YalnNode::YalnNode(std::string name)
 
 glm::mat4 YalnNode::localMatrix() const
 {
-    glm::mat4 m(1.0f);
-    m = glm::translate(m, m_position);
-    m = glm::rotate(m, m_rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-    m = glm::rotate(m, m_rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-    m = glm::rotate(m, m_rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-    return glm::scale(m, m_scale);
+    // T·R·S（Eigen 四元数旋转，边界转 glm）
+    return toGlmTRS(m_position, m_orientation, m_scale);
 }
 
 bool YalnNode::addChild(std::unique_ptr<YalnNode> child)
@@ -158,42 +154,23 @@ void YalnNode::collectInstances(std::vector<YalnDrawableInstance>& out) const
     }
 }
 
-// ==================== 变换节点族 ====================
-
-glm::mat4 YalnTranslateNode::localMatrix() const
-{
-    return glm::translate(glm::mat4(1.0f), m_position);
-}
-
-glm::mat4 YalnRotateNode::localMatrix() const
-{
-    return glm::rotate(glm::mat4(1.0f), m_angle, m_axis);
-}
-
-glm::mat4 YalnScaleNode::localMatrix() const
-{
-    return glm::scale(glm::mat4(1.0f), m_scaleFactor);
-}
-
 // ==================== YalnSpinNode ====================
-
-glm::mat4 YalnSpinNode::localMatrix() const
-{
-    return glm::rotate(glm::mat4(1.0f), m_angle, m_axis);
-}
 
 void YalnSpinNode::updateWorld(const glm::mat4& parentWorld, const glm::vec3& cameraPosition)
 {
     (void)cameraPosition;
 
-    // 用内部稳定时钟累加角度（暂停期间不积累时间）
+    // 用内部稳定时钟累加自旋：四元数右乘（绕自身轴），无欧拉角参与
     if (m_enabled && m_speed != 0.0f)
     {
         const auto now = std::chrono::steady_clock::now();
         if (m_lastTime.has_value())
         {
             const float dt = std::chrono::duration<float>(now - *m_lastTime).count();
-            m_angle += m_speed * std::min(dt, 0.1f);   // 卡顿/断点时防跳变
+            m_orientation =
+                (m_orientation *
+                 Eigen::Quaternionf(Eigen::AngleAxisf(m_speed * std::min(dt, 0.1f), m_axis)))
+                    .normalized();
         }
         m_lastTime = now;
     }
@@ -272,7 +249,8 @@ void YalnBillboardNode::updateWorld(const glm::mat4& parentWorld, const glm::vec
     if (m_enabled)
     {
         // 节点世界位置 = 父世界矩阵作用在本地位移上
-        const glm::vec3 myWorldPos(parentWorld * glm::vec4(m_position, 1.0f));
+        const glm::vec4 myWorldPos4 = parentWorld * glm::vec4(toGlm(m_position), 1.0f);
+        const glm::vec3 myWorldPos(myWorldPos4);
         const glm::vec3 toCamera = cameraPosition - myWorldPos;
 
         // 水平方位角：绕 Z 轴把 +X 转向相机（几何需为法线朝 +X 的薄片）
@@ -283,9 +261,11 @@ void YalnBillboardNode::updateWorld(const glm::mat4& parentWorld, const glm::vec
         // 相机与节点水平重合时保持上次朝向
     }
 
-    glm::mat4 local = glm::translate(glm::mat4(1.0f), m_position);
-    local = glm::rotate(local, m_facingAngle, glm::vec3(0.0f, 0.0f, 1.0f));
-    local = glm::scale(local, m_scale);
+    // 朝向 = 轴角(Z, facingAngle) → 四元数 → TRS
+    const glm::mat4 local = toGlmTRS(
+        m_position,
+        axisAngleToQuat(Eigen::Vector3f::UnitZ(), m_facingAngle),
+        m_scale);
 
     m_worldMatrix = parentWorld * local;
     for (const auto& child : m_children)

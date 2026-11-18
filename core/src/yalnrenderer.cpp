@@ -264,9 +264,33 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
         return FrameResult::SwapChainOutOfDate;
     }
 
-    // 更新 uniform（仅投影-视图矩阵）
+    // 更新 uniform：投影视图矩阵 + 相机位置 + 灯光打包
     YalnFrameUniform ubo{};
     ubo.proj_view_mat = camera->getMatrix();
+    ubo.camera_pos    = glm::vec4(camera->getPosition(), 0.0f);
+
+    // 环境光兜底：场景没加环境光时也给一点底色，避免全黑
+    ubo.ambient = glm::vec4(0.25f, 0.25f, 0.28f, 0.0f);
+
+    uint32_t lightCount = 0;
+    for (const auto& light : scene.lights())
+    {
+        if (light->type() == YalnLightType::Ambient)
+        {
+            // 环境光独立通道：多盏时后添加的生效
+            ubo.ambient = glm::vec4(light->color() * light->intensity(), 0.0f);
+            continue;
+        }
+        if (lightCount >= YALN_MAX_LIGHTS)
+        {
+            std::cerr << "YalnRenderer: 动态光源超过上限 " << YALN_MAX_LIGHTS
+                      << "，多余的已被忽略" << std::endl;
+            break;
+        }
+        ubo.lights[lightCount++] = light->gpuData();
+    }
+    ubo.counts = glm::ivec4(static_cast<int>(lightCount), 0, 0, 0);
+
     m_uniformBuffers[imageIndex].write(&ubo, sizeof(ubo));
 
     // 录制

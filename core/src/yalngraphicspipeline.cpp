@@ -6,7 +6,8 @@
 #include <array>
 #include <iostream>
 
-// 默认配置：与既有 shader.vert/frag（UBO 投影视图矩阵 + 推常量模型矩阵）匹配
+// 默认配置：与既有 shader.vert/frag 匹配
+// UBO（binding 0）：顶点阶段用投影视图矩阵，片段阶段用相机位置 + 灯光 → 两个阶段都可见
 YalnPipelineConfig YalnPipelineConfig::makeDefault()
 {
     YalnPipelineConfig config;
@@ -16,7 +17,7 @@ YalnPipelineConfig YalnPipelineConfig::makeDefault()
         0,
         vk::DescriptorType::eUniformBuffer,
         1,
-        vk::ShaderStageFlagBits::eVertex,
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
         nullptr));
     return config;
 }

@@ -43,6 +43,10 @@ public:
     void addMesh(YalnMesh* mesh) override;
     void clear() override;
 
+    // ---- 灯光（场景拥有所有权；clear() 一并清空）----
+    void addLight(std::unique_ptr<YalnLight> light) override { m_lights.push_back(std::move(light)); }
+    const std::vector<std::unique_ptr<YalnLight>>& lights() const override { return m_lights; }
+
     bool isEmpty() const override { return m_root->countDrawables() == 0; }
     bool isReady() const override { return !m_gpuMeshes.empty() && !isEmpty(); }
 
@@ -64,6 +68,8 @@ private:
     std::unordered_map<YalnMesh*, size_t> m_meshToGpu;   // 网格 → GPU 缓冲下标
 
     std::vector<YalnDrawItem> m_drawItems;   // update() 后有效
+
+    std::vector<std::unique_ptr<YalnLight>> m_lights;   // 场景级光源
 };
 
 #endif // YALN_SCENE_H

@@ -67,6 +67,7 @@ void YalnScene::clear()
     m_drawItems.clear();
     m_meshes.clear();
     m_gpuMeshes.clear();
+    m_lights.clear();
 }
 
 // ======================== GPU 缓冲 ========================

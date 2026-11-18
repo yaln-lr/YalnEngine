@@ -19,6 +19,11 @@
 #include "yalnnode.h"
 #include "yalndrawable.h"
 #include "yalnmath.h"
+#include "yalnlight.h"
+
+// 构建村庄场景（网格用 static 局部对象：首次加载时构造，程序全程存活；
+// 重复加载时先 scene.clear() 清空旧树与灯光，再复用同一批网格重建）
+static void buildVillageScene(QtViewer* viewer);
 
 int main(int argc, char *argv[])
 {
@@ -73,6 +78,13 @@ int main(int argc, char *argv[])
     toggleRotateAction->setChecked(true);
     viewMenu->addAction(toggleRotateAction);
 
+    // 场景菜单：启动时空场景，点"加载村庄场景"后才构建并显示
+    QMenu* sceneMenu = menuBar->addMenu(QString::fromUtf8("\u573a\u666f(&S)"));
+
+    QAction* loadSceneAction = new QAction(QString::fromUtf8("\u52a0\u8f7d\u6751\u5e84\u573a\u666f"), &mainWindow);
+    loadSceneAction->setShortcut(QKeySequence("Ctrl+L"));
+    sceneMenu->addAction(loadSceneAction);
+
     // 帮助菜单
     QMenu* helpMenu = menuBar->addMenu("&Help");
 
@@ -86,6 +98,15 @@ int main(int argc, char *argv[])
 
     QObject::connect(toggleRotateAction, &QAction::toggled, [viewer](bool checked) {
         viewer->setAutoRotate(checked);
+    });
+
+    QObject::connect(loadSceneAction, &QAction::triggered, [viewer, statusLabel, &mainWindow]() {
+        buildVillageScene(viewer);
+        if (viewer->rebuildScene()) {
+            statusLabel->setText(QString::fromUtf8("\u573a\u666f\u5df2\u52a0\u8f7d"));
+        } else {
+            QMessageBox::warning(&mainWindow, "Warning", "Failed to build scene GPU buffers!");
+        }
     });
 
     QObject::connect(exitAction, &QAction::triggered, [=, &app]() {
@@ -160,12 +181,32 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // 设置相机（俯瞰整个村庄）
+    // 设置相机（俯瞰整个村庄的默认视角；场景加载后即为此视角）
     float aspect = 1280.0f / 800.0f;
     YalnPerspectiveCameraPtr camera(new YalnPerspectiveCamera(45.0f, aspect, 0.1f, 100.0f));
     camera->setPosition(glm::vec3(16.0f, -18.0f, 14.0f));
     camera->setTarget(glm::vec3(0.0f, 0.0f, 1.0f));
     viewer->setCameta(camera);
+
+    // 启动渲染循环（此时场景尚未加载：每帧仅清屏，等待用户从菜单加载）
+    viewer->startRenderLoop();
+
+    // 进入 Qt 事件循环
+    return app.exec();
+}
+
+// ==================== 场景构建：村庄 ====================
+//
+// 房子由多面墙拼成（前/后/左右四面墙 + 门 + 四扇窗 + 屋顶），
+// 门/窗略微凸出墙面避免与墙共面闪烁；树 = 树干 + 双层球冠；
+// 路 = 两条略高于地面的灰色板。所有房子/树共享网格，GPU 缓冲去重。
+// GPU 缓冲由调用方在函数返回后通过 rebuildScene() 重建。
+static void buildVillageScene(QtViewer* viewer)
+{
+    IYalnScene& scene = viewer->scene();
+    // 重复加载：先清空旧场景树与灯光（网格为 static，可复用）
+    scene.clear();
+    YalnNode* root = scene.root();
 
     // ==================== 场景树：村庄（多面墙房子 + 门 + 窗 + 路 + 树 + 风车）====================
     //
@@ -175,48 +216,47 @@ int main(int argc, char *argv[])
 
     // ---- 网格资源（栈上分配，生命周期覆盖整个渲染循环）----
     // 配色：自然村庄色板（低饱和大地色系，同类物体色相一致，仅叶轮/屋顶用少量强调色）
-    YalnCube    groundMesh(40.0f, 40.0f, 0.2f, glm::vec3(0.42f, 0.55f, 0.33f));   // 草地（柔和草绿）
+    static YalnCube    groundMesh(40.0f, 40.0f, 0.2f, glm::vec3(0.42f, 0.55f, 0.33f));   // 草地（柔和草绿）
     // 水系与地形
-    YalnCube    lakeCenterMesh(13.0f, 13.0f, 0.03f, glm::vec3(0.30f, 0.48f, 0.62f));  // 湖心盘（湖蓝）
-    YalnCube    lakeSegMesh(14.0f, 7.0f, 0.03f, glm::vec3(0.30f, 0.48f, 0.62f));      // 湖缘弧段：多角度旋转叠出近似圆形湖岸
-    YalnCube    riverMesh(5.5f, 2.2f, 0.03f, glm::vec3(0.34f, 0.52f, 0.66f));     // 河段（略浅）
-    YalnCube    bridgeMesh(1.6f, 2.8f, 0.08f, glm::vec3(0.50f, 0.36f, 0.24f));    // 桥面（木色）
-    YalnCube    bridgePostMesh(0.14f, 0.14f, 0.5f, glm::vec3(0.42f, 0.30f, 0.20f));
-    YalnPyramid mountainMesh(5.0f, 5.0f, 3.2f, glm::vec3(0.47f, 0.46f, 0.43f));   // 山体（灰岩）
-    YalnPyramid snowCapMesh(2.0f, 2.0f, 1.3f, glm::vec3(0.94f, 0.95f, 0.97f));    // 雪帽
+    static YalnCube    lakeCenterMesh(13.0f, 13.0f, 0.03f, glm::vec3(0.30f, 0.48f, 0.62f));  // 湖心盘（湖蓝）
+    static YalnCube    lakeSegMesh(14.0f, 7.0f, 0.03f, glm::vec3(0.30f, 0.48f, 0.62f));      // 湖缘弧段：多角度旋转叠出近似圆形湖岸
+    static YalnCube    riverMesh(5.5f, 2.2f, 0.03f, glm::vec3(0.34f, 0.52f, 0.66f));     // 河段（略浅）
+    static YalnCube    bridgeMesh(1.6f, 2.8f, 0.08f, glm::vec3(0.50f, 0.36f, 0.24f));    // 桥面（木色）
+    static YalnCube    bridgePostMesh(0.14f, 0.14f, 0.5f, glm::vec3(0.42f, 0.30f, 0.20f));
+    static YalnPyramid mountainMesh(5.0f, 5.0f, 3.2f, glm::vec3(0.47f, 0.46f, 0.43f));   // 山体（灰岩）
+    static YalnPyramid snowCapMesh(2.0f, 2.0f, 1.3f, glm::vec3(0.94f, 0.95f, 0.97f));    // 雪帽
     // 电力设施
-    YalnCube    ppoleMesh(0.12f, 0.12f, 2.0f, glm::vec3(0.38f, 0.30f, 0.22f));    // 电线杆（深木棕）
-    YalnCube    crossarmMesh(0.08f, 0.9f, 0.08f, glm::vec3(0.38f, 0.30f, 0.22f)); // 横担
-    YalnCube    wireMesh(7.0f, 0.025f, 0.025f, glm::vec3(0.22f, 0.22f, 0.24f));   // 电线（深灰，跨 7m 杆距）
+    static YalnCube    ppoleMesh(0.12f, 0.12f, 2.0f, glm::vec3(0.38f, 0.30f, 0.22f));    // 电线杆（深木棕）
+    static YalnCube    crossarmMesh(0.08f, 0.9f, 0.08f, glm::vec3(0.38f, 0.30f, 0.22f)); // 横担
+    static YalnCube    wireMesh(7.0f, 0.025f, 0.025f, glm::vec3(0.22f, 0.22f, 0.24f));   // 电线（深灰，跨 7m 杆距）
     // 植被
-    YalnSphere  bushMesh(0.22f, 12, glm::vec3(0.30f, 0.44f, 0.24f));              // 灌木（暗绿）
-    YalnSphere  bushMesh2(0.16f, 10, glm::vec3(0.34f, 0.48f, 0.27f));             // 小灌木
-    YalnSphere  rockSmallMesh(0.2f, 10, glm::vec3(0.50f, 0.49f, 0.47f));          // 小石头
+    static YalnSphere  bushMesh(0.22f, 12, glm::vec3(0.30f, 0.44f, 0.24f));              // 灌木（暗绿）
+    static YalnSphere  bushMesh2(0.16f, 10, glm::vec3(0.34f, 0.48f, 0.27f));             // 小灌木
+    static YalnSphere  rockSmallMesh(0.2f, 10, glm::vec3(0.50f, 0.49f, 0.47f));          // 小石头
     // 房子部件（三栋共享）
-    YalnCube    wallFrontMesh(2.4f, 0.15f, 1.6f, glm::vec3(0.91f, 0.87f, 0.78f)); // 前/后墙（米白）
-    YalnCube    wallSideMesh(0.15f, 1.7f, 1.6f, glm::vec3(0.86f, 0.81f, 0.70f));  // 左/右墙（阴影侧略深）
-    YalnPyramid roofMesh(2.8f, 2.5f, 0.8f, glm::vec3(0.68f, 0.38f, 0.30f));       // 尖顶（陶土红）
-    YalnCube    flatRoofMesh(2.6f, 2.3f, 0.25f, glm::vec3(0.45f, 0.40f, 0.36f));  // 平顶（深灰棕）
-    YalnCube    doorMesh(0.7f, 0.10f, 1.3f, glm::vec3(0.40f, 0.28f, 0.18f));      // 门（深棕）
-    YalnCube    windowMeshF(0.6f, 0.10f, 0.5f, glm::vec3(0.58f, 0.72f, 0.82f));   // 前/后墙窗（柔天蓝）
-    YalnCube    windowMeshS(0.10f, 0.6f, 0.5f, glm::vec3(0.58f, 0.72f, 0.82f));   // 侧墙窗
+    static YalnCube    wallFrontMesh(2.4f, 0.15f, 1.6f, glm::vec3(0.91f, 0.87f, 0.78f)); // 前/后墙（米白）
+    static YalnCube    wallSideMesh(0.15f, 1.7f, 1.6f, glm::vec3(0.86f, 0.81f, 0.70f));  // 左/右墙（阴影侧略深）
+    static YalnPyramid roofMesh(2.8f, 2.5f, 0.8f, glm::vec3(0.68f, 0.38f, 0.30f));       // 尖顶（陶土红）
+    static YalnCube    flatRoofMesh(2.6f, 2.3f, 0.25f, glm::vec3(0.45f, 0.40f, 0.36f));  // 平顶（深灰棕）
+    static YalnCube    doorMesh(0.7f, 0.10f, 1.3f, glm::vec3(0.40f, 0.28f, 0.18f));      // 门（深棕）
+    static YalnCube    windowMeshF(0.6f, 0.10f, 0.5f, glm::vec3(0.58f, 0.72f, 0.82f));   // 前/后墙窗（柔天蓝）
+    static YalnCube    windowMeshS(0.10f, 0.6f, 0.5f, glm::vec3(0.58f, 0.72f, 0.82f));   // 侧墙窗
     // 风车
-    YalnCube    poleMesh(0.25f, 0.25f, 2.2f, glm::vec3(0.48f, 0.48f, 0.50f));     // 杆（深灰）
-    YalnCube    bladeMesh(2.2f, 0.2f, 0.3f, glm::vec3(0.93f, 0.92f, 0.90f));      // 横叶（暖白，沿 X）
-    YalnCube    bladeMesh2(0.3f, 0.2f, 2.2f, glm::vec3(0.72f, 0.38f, 0.32f));     // 竖叶（砖红强调，沿 Z）
-    YalnCube    markerMesh(0.06f, 1.2f, 0.8f, glm::vec3(0.93f, 0.92f, 0.90f));    // 公告板（暖白）
+    static YalnCube    poleMesh(0.25f, 0.25f, 2.2f, glm::vec3(0.48f, 0.48f, 0.50f));     // 杆（深灰）
+    static YalnCube    bladeMesh(2.2f, 0.2f, 0.3f, glm::vec3(0.93f, 0.92f, 0.90f));      // 横叶（暖白，沿 X）
+    static YalnCube    bladeMesh2(0.3f, 0.2f, 2.2f, glm::vec3(0.72f, 0.38f, 0.32f));     // 竖叶（砖红强调，沿 Z）
+    static YalnCube    markerMesh(0.06f, 1.2f, 0.8f, glm::vec3(0.93f, 0.92f, 0.90f));    // 公告板（暖白）
     // 路
-    YalnCube    roadMeshNS(1.6f, 32.0f, 0.04f, glm::vec3(0.45f, 0.45f, 0.47f));   // 南北向（沥青灰）
-    YalnCube    roadMeshEW(38.0f, 1.6f, 0.04f, glm::vec3(0.48f, 0.48f, 0.50f));   // 东西向（略浅）
+    static YalnCube    roadMeshNS(1.6f, 32.0f, 0.04f, glm::vec3(0.45f, 0.45f, 0.47f));   // 南北向（沥青灰）
+    static YalnCube    roadMeshEW(38.0f, 1.6f, 0.04f, glm::vec3(0.48f, 0.48f, 0.50f));   // 东西向（略浅）
     // 树（共享树干/树冠）
-    YalnCube    trunkMesh(0.18f, 0.18f, 0.8f, glm::vec3(0.42f, 0.33f, 0.24f));    // 树干（灰棕）
-    YalnSphere  canopyMeshA(0.52f, 20, glm::vec3(0.34f, 0.47f, 0.28f));           // 下层树冠（暗绿）
-    YalnSphere  canopyMeshB(0.38f, 16, glm::vec3(0.40f, 0.53f, 0.32f));           // 上层树冠（受光绿）
+    static YalnCube    trunkMesh(0.18f, 0.18f, 0.8f, glm::vec3(0.42f, 0.33f, 0.24f));    // 树干（灰棕）
+    static YalnSphere  canopyMeshA(0.52f, 20, glm::vec3(0.34f, 0.47f, 0.28f));           // 下层树冠（暗绿）
+    static YalnSphere  canopyMeshB(0.38f, 16, glm::vec3(0.40f, 0.53f, 0.32f));           // 上层树冠（受光绿）
     // 岩石
-    YalnSphere  rockMesh(0.45f, 24, glm::vec3(0.52f, 0.51f, 0.49f));              // 岩石（石灰岩灰）
-
-    IYalnScene& scene = viewer->scene();
-    YalnNode* root = scene.root();
+    static YalnSphere  rockMesh(0.45f, 24, glm::vec3(0.52f, 0.51f, 0.49f));              // 岩石（石灰岩灰）
+    // 灯具
+    static YalnSphere  lampBulbMesh(0.12f, 12, glm::vec3(1.0f, 0.92f, 0.62f));           // 路灯灯泡（高亮暖白）
 
     // ---- 可复用子树工厂：树 = 树干 + 双层球冠 ----
     auto makeTree = [&trunkMesh, &canopyMeshA, &canopyMeshB](const std::string& name, float scale) {
@@ -641,17 +681,53 @@ int main(int argc, char *argv[])
     rock->addChild(std::move(rockTilt));
     root->addChild(std::move(rock));
 
-    std::cout << "Scene tree: nodes=" << root->countNodes()
-              << ", drawables=" << root->countDrawables() << std::endl;
+    // ---- 灯光：环境光 + 太阳平行光 + 两盏路灯（点光）+ 风车探照灯（聚光）----
+    {
+        // 环境光：偏冷天光（模拟天空散射），决定暗面不至于全黑
+        auto ambient = std::make_unique<YalnAmbientLight>();
+        ambient->setColor(glm::vec3(0.58f, 0.65f, 0.78f));
+        ambient->setIntensity(0.55f);
+        scene.addLight(std::move(ambient));
 
-    // 场景树就绪，重建 GPU 缓冲
-    if (!viewer->rebuildScene()) {
-        QMessageBox::warning(&mainWindow, "Warning", "Failed to build scene GPU buffers!");
+        // 太阳：暖白平行光，从东南上空斜射
+        auto sun = std::make_unique<YalnDirectionalLight>();
+        sun->setDirection(glm::normalize(glm::vec3(-0.45f, -0.35f, -0.9f)));
+        sun->setColor(glm::vec3(1.00f, 0.96f, 0.88f));
+        sun->setIntensity(0.9f);
+        scene.addLight(std::move(sun));
+
+        // 路灯：挂在东西路电线杆横担下（灯泡小球可视化 + 暖黄点光）
+        const glm::vec3 lampSpots[] = {
+            glm::vec3(0.0f, 2.4f, 1.62f),
+            glm::vec3(7.0f, 2.4f, 1.62f),
+        };
+        for (int i = 0; i < 2; i++)
+        {
+            auto lampNode = std::make_unique<YalnLeafNode>("lamp." + std::to_string(i + 1));
+            auto lampDrawable = std::make_unique<YalnMeshDrawable>(&lampBulbMesh);
+            lampDrawable->setPosition(Eigen::Vector3f(lampSpots[i].x, lampSpots[i].y, lampSpots[i].z));
+            lampNode->attachDrawable(std::move(lampDrawable));
+            root->addChild(std::move(lampNode));
+
+            auto lampLight = std::make_unique<YalnPointLight>();
+            lampLight->setPosition(lampSpots[i]);
+            lampLight->setColor(glm::vec3(1.0f, 0.85f, 0.55f));
+            lampLight->setIntensity(1.3f);
+            lampLight->setRange(8.0f);
+            scene.addLight(std::move(lampLight));
+        }
+
+        // 风车探照灯：从杆顶斜向下照射的聚光灯（内锥 18°/外锥 30°，扫亮风车脚下草地）
+        auto searchLight = std::make_unique<YalnSpotLight>();
+        searchLight->setPosition(glm::vec3(-5.5f, 9.5f, 2.6f));
+        searchLight->setDirection(glm::normalize(glm::vec3(0.15f, 0.25f, -1.0f)));
+        searchLight->setColor(glm::vec3(1.0f, 0.95f, 0.85f));
+        searchLight->setIntensity(1.6f);
+        searchLight->setRange(14.0f);
+        searchLight->setAngles(18.0f, 30.0f);
+        scene.addLight(std::move(searchLight));
     }
 
-    // 启动渲染循环
-    viewer->startRenderLoop();
-
-    // 进入 Qt 事件循环
-    return app.exec();
+    std::cout << "Scene tree: nodes=" << root->countNodes()
+              << ", drawables=" << root->countDrawables() << std::endl;
 }

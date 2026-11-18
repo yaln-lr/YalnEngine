@@ -57,6 +57,7 @@ set(YALN_CORE_HDRS
     ./include/yalnshaderprogram.h
     ./include/yalninterfaces.h
     ./include/yalnmath.h             # Eigen 四元数 ↔ glm 桥接
+    ./include/yalnlight.h            # 灯光系统（四类光源 + GPU 打包）
     ./include/yalndrawable.h
     ./include/yalnnode.h
     ./include/yalnmesh.h

@@ -12,9 +12,16 @@
 // 同时在飞行的帧数（默认值，可通过 YalnRendererConfig 覆盖）
 constexpr uint32_t YALN_MAX_FRAMES_IN_FLIGHT = 2;
 
-// 每帧的 uniform 数据（仅投影-视图矩阵）
+// 动态光源（平行/点/聚光）数量上限；环境光走独立通道不受此限
+inline constexpr uint32_t YALN_MAX_LIGHTS = 8;
+
+// 每帧的 uniform 数据（std140，与 shader.vert/frag 的 UniformBufferObject 一一对应）
 struct YALN_CORE_EXPORT YalnFrameUniform {
     alignas(16) glm::mat4 proj_view_mat;
+    alignas(16) glm::vec4 camera_pos;    // xyz = 相机世界坐标（高光/衰减计算用）
+    alignas(16) glm::vec4 ambient;       // rgb = 环境光色 × 强度（无环境光时渲染器兜底）
+    alignas(16) glm::ivec4 counts;       // x = 动态光源数量
+    alignas(16) YalnGPULight lights[YALN_MAX_LIGHTS];
 };
 
 // ============================================================================

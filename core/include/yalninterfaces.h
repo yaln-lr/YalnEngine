@@ -32,6 +32,7 @@
 #include "global_type.h"
 #include "yalncamera.h"
 #include "yalnbuffer.h"   // YalnGpuMesh 需要缓冲类型
+#include "yalnlight.h"    // 场景级光源
 
 class IYalnDevice;
 class IYalnSwapChain;
@@ -398,6 +399,12 @@ public:
     virtual void update(const glm::vec3& cameraPosition = glm::vec3(0.0f)) = 0;
     // update() 之后有效；渲染器按此列表逐项绘制
     virtual const std::vector<YalnDrawItem>& drawItems() const = 0;
+
+    // ---- 灯光 ----
+    // 场景级光源（Ambient/Directional/Point/Spot），场景拥有所有权；
+    // 渲染器每帧打包进 YalnFrameUniform，动态光源上限 YALN_MAX_LIGHTS
+    virtual void addLight(std::unique_ptr<YalnLight> light) = 0;
+    virtual const std::vector<std::unique_ptr<YalnLight>>& lights() const = 0;
 
     // ---- 兼容扁平接口：直接挂一个网格到根节点（等价于根节点下一个绘制项）----
     virtual void addMesh(YalnMesh* mesh) = 0;

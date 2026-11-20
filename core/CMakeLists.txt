@@ -17,6 +17,10 @@ set(YALN_CORE_SRCS
     ./src/yalnbuffer.cpp           # 缓冲 + 显存
     ./src/yalnscene.cpp            # 场景（网格容器 + GPU 缓冲）
     ./src/yalnrenderer.cpp         # 命令缓冲 / 同步 / UBO / 描述符 / drawFrame
+    ./src/yalnpipelinelibrary.cpp  # PSO 注册表
+    ./src/yalnmateriallibrary.cpp  # 材质注册表
+    ./src/yalnforwardpass.cpp      # 默认前向 Opaque Pass
+    ./src/yalnforwardpipeline.cpp  # 默认 Forward 整帧策略
 
     # ---- 其它 ----
     ./src/yalnvertex.cpp
@@ -45,6 +49,12 @@ set(YALN_CORE_HDRS
     ./include/yalnbuffer.h
     ./include/yalnscene.h
     ./include/yalnrenderer.h
+    ./include/yalnrendertypes.h
+    ./include/yalnpipelinelibrary.h
+    ./include/yalnmateriallibrary.h
+    ./include/yalnframe.h
+    ./include/yalnforwardpass.h
+    ./include/yalnforwardpipeline.h
 
     ./include/yalnvertex.h
     ./include/event.h

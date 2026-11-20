@@ -26,6 +26,15 @@ public:
     virtual const std::vector<YalnVertexPC>& getVertices() const = 0;
     virtual const std::vector<uint32_t>&     getIndices()  const = 0;
 
+    // 通用顶点数据视图。默认把 getVertices() 当作 YalnVertexPC 数组；
+    // 自定义顶点格式的网格可覆盖这三个方法，并在管线配置中声明对应布局。
+    virtual const void* getVertexData() const
+    {
+        return static_cast<const void*>(getVertices().data());
+    }
+    virtual size_t getVertexStride() const { return sizeof(YalnVertexPC); }
+    virtual size_t getVertexCount()  const { return getVertices().size(); }
+
     // 模型矩阵（YalnRenderer 每帧经 Push Constants 上传）
     virtual glm::mat4 getModelMatrix() const = 0;
 
@@ -34,6 +43,15 @@ public:
 
     // CPU 端内存占用（字节）
     virtual size_t getCPUMemorySize() const = 0;
+
+    // 局部空间包围盒；默认实现不支持（返回 false）。
+    // 场景 update() 用它生成绘制项的世界空间包围盒，供后续剔除/排序使用。
+    virtual bool getLocalBounds(glm::vec3& minBounds, glm::vec3& maxBounds) const
+    {
+        (void)minBounds;
+        (void)maxBounds;
+        return false;
+    }
 };
 
 // ============================================================================
@@ -54,6 +72,7 @@ public:
     glm::mat4 getModelMatrix() const override;
     bool isValid() const override;
     size_t getCPUMemorySize() const override;
+    bool getLocalBounds(glm::vec3& minBounds, glm::vec3& maxBounds) const override;
 
     // ---- 数据操作 ----
     void clear();

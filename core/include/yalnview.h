@@ -14,6 +14,10 @@
 #include "yalnmesh.h"
 #include "yalninterfaces.h"
 #include "yalnshaderprogram.h"
+#include "yalnmateriallibrary.h"
+#include "yalnpipelinelibrary.h"
+
+class IYalnFramePipeline;
 
 // 组合的各个子系统：接口 + 默认实现（默认实现可整体替换）
 #include "yalnvulkaninstance.h"
@@ -62,6 +66,9 @@ public:
     bool setRenderer(std::unique_ptr<IYalnRenderer> renderer);
     bool setScene(std::unique_ptr<IYalnScene> scene);
 
+    // 帧级策略：初始化前保存，初始化时转交渲染器；初始化后直接热替换。
+    bool setFramePipeline(std::unique_ptr<IYalnFramePipeline> pipeline);
+
     // ==================== 配置注入（配置扩展）====================
     void setRenderPassConfig(const YalnRenderPassConfig& config) { m_renderPassConfig = config; }
     void setPipelineConfig(const YalnPipelineConfig&    config) { m_pipelineConfig  = config; }
@@ -98,6 +105,21 @@ public:
     const IYalnPipeline&  pipeline()       const { return *m_pipeline; }
     IYalnRenderer&        renderer()       const { return *m_renderer; }
     IYalnScene&           scene()          const { return *m_scene; }
+
+    IYalnShaderProgram* shaderProgram() const { return m_shaderProgram.get(); }
+    IYalnFramePipeline* framePipeline() const;
+
+    // 资源库（初始化后可用）：注册额外 PSO、创建材质
+    YalnPipelineLibrary* pipelineLibrary() const;
+    YalnMaterialLibrary* materialLibrary() const;
+
+    // 便捷扩展：使用当前着色器程序创建一条新 PSO 并登记。
+    // 需要不同着色器时，自行创建 IYalnPipeline 后调用 pipelineLibrary()->addPipeline()。
+    YalnPipelineHandle createPipeline(const YalnPipelineConfig& config,
+                                      const std::string&        name = {});
+
+    // 便捷扩展：创建材质（句柄用于 YalnDrawable::setMaterial）
+    YalnMaterialHandle createMaterial(const YalnMaterialDesc& desc);
 
     vk::Extent2D swapChainExtent() const { return m_swapChain->extent(); }
 
@@ -141,6 +163,7 @@ private:
     std::unique_ptr<IYalnShaderProgram> m_shaderProgram;
 
     std::unique_ptr<IYalnPipeline>   m_pipeline    = std::make_unique<YalnGraphicsPipeline>();
+    std::unique_ptr<IYalnFramePipeline> m_framePipeline;
     std::unique_ptr<IYalnRenderer>   m_renderer    = std::make_unique<YalnRenderer>();
     std::unique_ptr<IYalnScene>      m_scene       = std::make_unique<YalnScene>();
 

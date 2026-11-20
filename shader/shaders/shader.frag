@@ -23,19 +23,28 @@ layout(binding = 0) uniform UniformBufferObject {
     Light lights[8];
 } ubo;
 
+// Push Constants - 与 core/include/yalnrendertypes.h 的 YalnMaterialPushConstants 一致
+layout(push_constant) uniform PushConstants {
+    mat4 model;
+    vec4 base_color;
+} pc;
+
 // ============================================================================
 //  Blinn-Phong 光照
 //  法线：屏幕空间导数求面法线（平面着色）——网格无需携带法线属性，
 //        三角形内部法线恒定，天然契合低多边形美术风格
 // ============================================================================
 void main() {
+    // 材质乘色：默认白色保持原有外观；不同材质可染同一管线的对象
+    vec3 albedo = fragColor * pc.base_color.rgb;
+
     // dFdx/dFdy 叉积得到当前三角形的世界空间法线
     vec3 N = normalize(cross(dFdx(worldPos), dFdy(worldPos)));
     // 视线方向（片段 → 相机）
     vec3 V = normalize(ubo.camera_pos.xyz - worldPos);
 
     // 环境光底色
-    vec3 result = fragColor * ubo.ambient.rgb;
+    vec3 result = albedo * ubo.ambient.rgb;
 
     for (int i = 0; i < ubo.counts.x && i < 8; ++i) {
         Light L = ubo.lights[i];
@@ -79,7 +88,7 @@ void main() {
 
         // 高光用固定中性色（约半强度白色），避免把顶点色过度提亮
         result += L.color.rgb * intensity * atten * spotF *
-                  (fragColor * diff + vec3(0.30, 0.29, 0.27) * spec);
+                  (albedo * diff + vec3(0.30, 0.29, 0.27) * spec);
     }
 
     outColor = vec4(result, 1.0);

@@ -7,6 +7,7 @@
 
 #include "global_type.h"
 #include "yalnmath.h"
+#include "yalnrendertypes.h"
 
 class YalnMesh;
 
@@ -31,6 +32,18 @@ public:
 
     virtual bool visible() const = 0;
     virtual void setVisible(bool visible) = 0;
+
+    // 材质与 Pass 选择（默认值保持旧行为：默认材质、参与全部 Pass）。
+    // 派生绘制项可覆盖，实现按对象/按状态切换材质或 Pass。
+    virtual YalnMaterialHandle material() const { return YALN_DEFAULT_MATERIAL; }
+    virtual void setMaterial(YalnMaterialHandle material) { (void)material; }
+
+    virtual uint32_t passMask() const { return YALN_PASS_MASK_ALL; }
+    virtual void setPassMask(uint32_t passMask) { (void)passMask; }
+
+    // 可选：跳过材质中的管线选择，直接指定 PSO（默认无效 = 走材质）
+    virtual YalnPipelineHandle pipelineOverride() const { return YALN_INVALID_PIPELINE; }
+    virtual void setPipelineOverride(YalnPipelineHandle pipeline) { (void)pipeline; }
 };
 
 // ============================================================================
@@ -53,6 +66,15 @@ public:
 
     bool visible() const override { return m_visible; }
     void setVisible(bool visible) override { m_visible = visible; }
+
+    YalnMaterialHandle material() const override { return m_material; }
+    void setMaterial(YalnMaterialHandle material) override { m_material = material; }
+
+    uint32_t passMask() const override { return m_passMask; }
+    void setPassMask(uint32_t passMask) override { m_passMask = passMask; }
+
+    YalnPipelineHandle pipelineOverride() const override { return m_pipelineOverride; }
+    void setPipelineOverride(YalnPipelineHandle pipeline) override { m_pipelineOverride = pipeline; }
 
     // ---- 局部变换 ----
     void setPosition(const Eigen::Vector3f& p)        { m_position = p; }
@@ -78,6 +100,10 @@ public:
 private:
     YalnMesh* m_mesh = nullptr;   // 非拥有引用
     bool      m_visible = true;
+
+    YalnMaterialHandle m_material = YALN_DEFAULT_MATERIAL;
+    uint32_t           m_passMask = YALN_PASS_MASK_ALL;
+    YalnPipelineHandle m_pipelineOverride = YALN_INVALID_PIPELINE;
 
     Eigen::Vector3f       m_position{ Eigen::Vector3f::Zero() };
     Eigen::Quaternionf    m_orientation{ Eigen::Quaternionf::Identity() };

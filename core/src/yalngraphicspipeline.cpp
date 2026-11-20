@@ -54,15 +54,27 @@ bool YalnGraphicsPipeline::create(const IYalnDevice&          device,
     // ---- 着色器阶段（由着色器程序提供，与加载来源解耦）----
     const std::vector<vk::PipelineShaderStageCreateInfo> shaderStages = shaderProgram.stageInfos();
 
-    // 顶点输入（当前固定为 YalnVertexPC：位置 + 颜色）
-    const auto bindingDescription    = YalnVertexPC::getBindingDescription();
-    const auto attributeDescriptions = YalnVertexPC::getAttributeDescriptions();
+    // 顶点输入：优先使用配置中的自定义布局；为空时保持 YalnVertexPC。
+    const auto defaultBinding    = YalnVertexPC::getBindingDescription();
+    const auto defaultAttributes = YalnVertexPC::getAttributeDescriptions();
+
+    const vk::VertexInputBindingDescription* bindingDescription = &defaultBinding;
+    uint32_t bindingCount = 1u;
+    const vk::VertexInputAttributeDescription* attributeDescriptions = defaultAttributes.data();
+    uint32_t attributeCount = static_cast<uint32_t>(defaultAttributes.size());
+
+    if (!m_config.vertexBindings.empty() && !m_config.vertexAttributes.empty())
+    {
+        bindingDescription   = m_config.vertexBindings.data();
+        bindingCount         = static_cast<uint32_t>(m_config.vertexBindings.size());
+        attributeDescriptions = m_config.vertexAttributes.data();
+        attributeCount       = static_cast<uint32_t>(m_config.vertexAttributes.size());
+    }
 
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo(
         {},
-        1, reinterpret_cast<const vk::VertexInputBindingDescription*>(&bindingDescription),
-        static_cast<uint32_t>(attributeDescriptions.size()),
-        reinterpret_cast<const vk::VertexInputAttributeDescription*>(attributeDescriptions.data()));
+        bindingCount, bindingDescription,
+        attributeCount, attributeDescriptions);
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly(
         {},

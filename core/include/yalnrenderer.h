@@ -8,6 +8,11 @@
 
 #include "global_type.h"
 #include "yalninterfaces.h"
+#include "yalnframe.h"
+#include "yalnmateriallibrary.h"
+#include "yalnpipelinelibrary.h"
+
+class IYalnFramePipeline;
 
 // 同时在飞行的帧数（默认值，可通过 YalnRendererConfig 覆盖）
 constexpr uint32_t YALN_MAX_FRAMES_IN_FLIGHT = 2;
@@ -37,6 +42,7 @@ public:
     using FrameResult = YalnFrameResult;
 
     YalnRenderer() = default;
+    ~YalnRenderer() override;
 
     YalnRenderer(const YalnRenderer&)            = delete;
     YalnRenderer& operator=(const YalnRenderer&) = delete;
@@ -63,6 +69,23 @@ public:
     const YalnRendererConfig& config() const override { return m_config; }
     bool isValid() const override { return m_initialized; }
 
+    // ---- 帧级策略与资源库 ----
+    // setFramePipeline 可在 initialize 前保存，也可在 initialize 后热替换。
+    bool setFramePipeline(std::unique_ptr<IYalnFramePipeline>&& pipeline) override;
+    IYalnFramePipeline* framePipeline() const override;
+
+    YalnPipelineLibrary*       pipelineLibrary() override       { return &m_pipelineLibrary; }
+    const YalnPipelineLibrary* pipelineLibrary() const override { return &m_pipelineLibrary; }
+
+    YalnMaterialLibrary*       materialLibrary() override       { return &m_materialLibrary; }
+    const YalnMaterialLibrary* materialLibrary() const override { return &m_materialLibrary; }
+
+    YalnPipelineLibrary&       pipelines()       { return m_pipelineLibrary; }
+    const YalnPipelineLibrary& pipelines() const { return m_pipelineLibrary; }
+
+    YalnMaterialLibrary&       materials()       { return m_materialLibrary; }
+    const YalnMaterialLibrary& materials() const { return m_materialLibrary; }
+
 private:
     bool createCommandPool();
     bool createUniformBuffers(const IYalnSwapChain& swapChain);
@@ -75,15 +98,20 @@ private:
     void recordCommandBuffer(vk::CommandBuffer          commandBuffer,
                              uint32_t                   imageIndex,
                              const IYalnSwapChain&      swapChain,
-                             const IYalnPipeline&       pipeline,
                              const IYalnRenderPass&     renderPass,
-                             const IYalnScene&          scene);
+                             const IYalnScene&          scene,
+                             const YalnCamera&          camera);
 
-    const IYalnDevice* m_device = nullptr;
-    bool               m_initialized = false;
+    const IYalnDevice*    m_device = nullptr;
+    const IYalnSwapChain* m_swapChain = nullptr;
+    bool                  m_initialized = false;
 
     YalnRendererConfig m_config;
     uint32_t           m_maxFramesInFlight = YALN_MAX_FRAMES_IN_FLIGHT;
+
+    YalnPipelineLibrary m_pipelineLibrary;
+    YalnMaterialLibrary m_materialLibrary;
+    std::unique_ptr<IYalnFramePipeline> m_framePipeline;
 
     vk::raii::CommandPool m_commandPool{ nullptr };
 

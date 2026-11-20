@@ -45,6 +45,14 @@ void YalnStaticMesh::calculateBounds(glm::vec3& minBounds, glm::vec3& maxBounds)
     }
 }
 
+bool YalnStaticMesh::getLocalBounds(glm::vec3& minBounds, glm::vec3& maxBounds) const {
+    if (m_vertices.empty()) {
+        return false;
+    }
+    calculateBounds(minBounds, maxBounds);
+    return true;
+}
+
 // ==================== YalnCube ====================
 
 // 立方体构造函数

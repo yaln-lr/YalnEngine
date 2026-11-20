@@ -25,6 +25,7 @@
 #include <glm/glm.hpp>
 
 #include <array>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -33,10 +34,16 @@
 #include "yalncamera.h"
 #include "yalnbuffer.h"   // YalnGpuMesh 需要缓冲类型
 #include "yalnlight.h"    // 场景级光源
+#include "yalnrendertypes.h"
 
 class IYalnDevice;
 class IYalnSwapChain;
 class YalnMesh;
+
+// 帧级策略与资源库（定义在各自头文件；接口层只前向声明）
+class IYalnFramePipeline;
+class YalnPipelineLibrary;
+class YalnMaterialLibrary;
 
 // ============================================================================
 //  共享值类型
@@ -109,8 +116,16 @@ struct YALN_CORE_EXPORT YalnPipelineConfig {
 
     std::vector<vk::DescriptorSetLayoutBinding> descriptorBindings;  // 空 = 无描述符
 
+    // 自定义顶点布局；为空时默认使用 YalnVertexPC（位置 + 颜色）。
+    // 典型用法：新网格格式 = 新顶点结构 + 这里填 binding/attribute。
+    std::vector<vk::VertexInputBindingDescription>   vertexBindings;
+    std::vector<vk::VertexInputAttributeDescription> vertexAttributes;
+
+    // 默认与 shader.vert/frag 的 push_constant 块一致（world + baseColor）
     vk::PushConstantRange pushConstant =
-        vk::PushConstantRange(vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4));
+        vk::PushConstantRange(vk::ShaderStageFlagBits::eVertex |
+                              vk::ShaderStageFlagBits::eFragment,
+                              0, sizeof(YalnMaterialPushConstants));
 
     vk::SampleCountFlagBits samples = vk::SampleCountFlagBits::e1;
 
@@ -143,11 +158,25 @@ struct YALN_CORE_EXPORT YalnGpuMesh {
     uint32_t   indexCount = 0;
 };
 
-// 一次 draw call 的全部信息：GPU 缓冲 + 世界矩阵
+// 一次 draw call 的全部信息：GPU 缓冲 + 世界矩阵 + 材质/Pass 选择
 // （同一网格多处实例共享同一份 GPU 缓冲；由场景 update() 收集生成）
 struct YALN_CORE_EXPORT YalnDrawItem {
     const YalnGpuMesh* gpuMesh = nullptr;
     glm::mat4          world{ 1.0f };
+
+    // 材质句柄：默认 0；材质决定使用哪条管线、哪种材质参数
+    YalnMaterialHandle material = YALN_DEFAULT_MATERIAL;
+
+    // 该绘制项参与的 Pass 位掩码（默认全部 Pass）
+    uint32_t passMask = YALN_PASS_MASK_ALL;
+
+    // 可选：直接覆盖材质中的管线选择（调试/特殊对象用，默认无）
+    YalnPipelineHandle pipelineOverride = YALN_INVALID_PIPELINE;
+
+    // 调试/剔除用：源网格与世界空间包围盒
+    const YalnMesh* mesh = nullptr;
+    glm::vec3       boundsMin{ 0.0f };
+    glm::vec3       boundsMax{ 0.0f };
 };
 
 // ============================================================================
@@ -452,6 +481,22 @@ public:
 
     virtual const YalnRendererConfig& config() const = 0;
     virtual bool isValid() const = 0;
+
+    // ---- 帧级策略与资源库扩展点 ----
+    // 默认实现返回 false/nullptr；自定义渲染器可不支持。
+    virtual bool setFramePipeline(std::unique_ptr<IYalnFramePipeline>&& pipeline)
+    {
+        (void)pipeline;
+        return false;
+    }
+
+    virtual IYalnFramePipeline* framePipeline() const { return nullptr; }
+
+    virtual YalnPipelineLibrary*       pipelineLibrary()       { return nullptr; }
+    virtual const YalnPipelineLibrary* pipelineLibrary() const { return nullptr; }
+
+    virtual YalnMaterialLibrary*       materialLibrary()       { return nullptr; }
+    virtual const YalnMaterialLibrary* materialLibrary() const { return nullptr; }
 };
 
 #endif // YALN_INTERFACES_H

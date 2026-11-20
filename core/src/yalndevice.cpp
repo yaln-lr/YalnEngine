@@ -158,6 +158,15 @@ bool YalnDevice::createLogicalDevice()
     }
 
     vk::PhysicalDeviceFeatures deviceFeatures{};
+    const vk::PhysicalDeviceFeatures supportedFeatures = m_physicalDevice.getFeatures();
+    if (supportedFeatures.fillModeNonSolid)
+    {
+        deviceFeatures.fillModeNonSolid = VK_TRUE;
+    }
+    if (supportedFeatures.wideLines)
+    {
+        deviceFeatures.wideLines = VK_TRUE;
+    }
     const auto& layers = YalnVulkanInstance::validationLayers();
 
     vk::DeviceCreateInfo createInfo(

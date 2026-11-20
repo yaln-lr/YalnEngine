@@ -11,6 +11,7 @@
 #include <QMessageBox>
 #include <QElapsedTimer>
 #include <iostream>
+#include <string>
 
 #include "qtviewer.h"
 #include "yalnperspectivecamera.h"
@@ -24,6 +25,7 @@
 // 构建村庄场景（网格用 static 局部对象：首次加载时构造，程序全程存活；
 // 重复加载时先 scene.clear() 清空旧树与灯光，再复用同一批网格重建）
 static void buildVillageScene(QtViewer* viewer);
+static void applyRenderExtensionDemo(QtViewer* viewer);
 
 int main(int argc, char *argv[])
 {
@@ -85,6 +87,9 @@ int main(int argc, char *argv[])
     loadSceneAction->setShortcut(QKeySequence("Ctrl+L"));
     sceneMenu->addAction(loadSceneAction);
 
+    QAction* demoAction = new QAction(QString::fromUtf8("\u5e94\u7528\u6750\u8d28/\u7ba1\u7ebf\u793a\u4f8b"), &mainWindow);
+    sceneMenu->addAction(demoAction);
+
     // 帮助菜单
     QMenu* helpMenu = menuBar->addMenu("&Help");
 
@@ -107,6 +112,15 @@ int main(int argc, char *argv[])
         } else {
             QMessageBox::warning(&mainWindow, "Warning", "Failed to build scene GPU buffers!");
         }
+    });
+
+    QObject::connect(demoAction, &QAction::triggered, [viewer, statusLabel]() {
+        if (!viewer->isInitialized() || viewer->scene().isEmpty()) {
+            statusLabel->setText("Load the village scene first");
+            return;
+        }
+        applyRenderExtensionDemo(viewer);
+        statusLabel->setText("Render extension demo applied");
     });
 
     QObject::connect(exitAction, &QAction::triggered, [=, &app]() {
@@ -187,6 +201,14 @@ int main(int argc, char *argv[])
     camera->setPosition(glm::vec3(16.0f, -18.0f, 14.0f));
     camera->setTarget(glm::vec3(0.0f, 0.0f, 1.0f));
     viewer->setCameta(camera);
+
+    // 可选：命令行直接加载场景并应用材质/管线示例，便于自动化验证。
+    if (app.arguments().contains("--demo-render-extension")) {
+        buildVillageScene(viewer);
+        if (viewer->rebuildScene()) {
+            applyRenderExtensionDemo(viewer);
+        }
+    }
 
     // 启动渲染循环（此时场景尚未加载：每帧仅清屏，等待用户从菜单加载）
     viewer->startRenderLoop();
@@ -730,4 +752,58 @@ static void buildVillageScene(QtViewer* viewer)
 
     std::cout << "Scene tree: nodes=" << root->countNodes()
               << ", drawables=" << root->countDrawables() << std::endl;
+}
+
+// ==================== 扩展示例：材质与按对象管线 ====================
+// 1) 风车组：继续使用默认 PSO，只换材质乘色（同管线、不同材质）。
+// 2) 三座山：创建一条线框 PSO，并通过材质挂接到山体（不同对象、不同管线）。
+static void applyRenderExtensionDemo(QtViewer* viewer)
+{
+    if (viewer == nullptr || !viewer->isInitialized() || viewer->scene().isEmpty()) {
+        return;
+    }
+
+    static YalnMaterialHandle tintMaterial = YALN_INVALID_MATERIAL;
+    if (tintMaterial == YALN_INVALID_MATERIAL) {
+        YalnMaterialDesc desc;
+        desc.name = "WindmillTint";
+        desc.baseColor = glm::vec4(1.0f, 0.78f, 0.42f, 1.0f);
+        desc.defaultPipeline = YALN_DEFAULT_PIPELINE;
+        tintMaterial = viewer->createMaterial(desc);
+    }
+    if (YalnNode* windmill = viewer->scene().root()->find("windmill")) {
+        windmill->setMaterialRecursive(tintMaterial);
+    }
+
+    static YalnPipelineHandle wirePipeline = YALN_INVALID_PIPELINE;
+    static YalnMaterialHandle wireMaterial = YALN_INVALID_MATERIAL;
+    if (wirePipeline == YALN_INVALID_PIPELINE) {
+        if (viewer->device().physicalDevice().getFeatures().fillModeNonSolid) {
+            YalnPipelineConfig config = viewer->pipeline().config();
+            config.polygonMode = vk::PolygonMode::eLine;
+            config.cullMode = vk::CullModeFlagBits::eNone;
+            config.lineWidth = 1.0f;
+            wirePipeline = viewer->createPipeline(config, "MountainWireframe");
+        } else {
+            std::cout << "fillModeNonSolid unsupported: skip wireframe demo" << std::endl;
+        }
+    }
+    if (wirePipeline != YALN_INVALID_PIPELINE && wireMaterial == YALN_INVALID_MATERIAL) {
+        YalnMaterialDesc desc;
+        desc.name = "MountainWire";
+        desc.baseColor = glm::vec4(0.40f, 1.0f, 0.70f, 1.0f);
+        desc.defaultPipeline = wirePipeline;
+        wireMaterial = viewer->createMaterial(desc);
+    }
+    if (wireMaterial != YALN_INVALID_MATERIAL) {
+        for (int i = 1; i <= 3; ++i) {
+            if (YalnNode* mountain = viewer->scene().root()->find("mountain" + std::to_string(i))) {
+                mountain->setMaterialRecursive(wireMaterial);
+            }
+        }
+    }
+
+    std::cout << "Render extension demo: tintMaterial=" << tintMaterial
+              << ", wirePipeline=" << wirePipeline
+              << ", wireMaterial=" << wireMaterial << std::endl;
 }

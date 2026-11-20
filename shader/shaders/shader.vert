@@ -26,9 +26,10 @@ layout(binding = 0) uniform UniformBufferObject {
     Light lights[8];
 } ubo;
 
-// Push Constants - 模型矩阵
-layout(push_constant) uniform ModelMatrix {
+// Push Constants - 与 core/include/yalnrendertypes.h 的 YalnMaterialPushConstants 一致
+layout(push_constant) uniform PushConstants {
     mat4 model;
+    vec4 base_color;
 } pc;
 
 void main() {

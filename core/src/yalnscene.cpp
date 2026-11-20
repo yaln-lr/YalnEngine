@@ -2,7 +2,9 @@
 #include "../include/yalndevice.h"
 #include "../include/yalnmesh.h"
 
+#include <array>
 #include <iostream>
+#include <limits>
 #include <set>
 
 YalnScene::YalnScene()
@@ -45,7 +47,43 @@ void YalnScene::update(const glm::vec3& cameraPosition)
             // GPU 缓冲未构建（改树后忘了 rebuild）：跳过该项而不是崩溃
             continue;
         }
-        m_drawItems.push_back({ &m_gpuMeshes[it->second], instance.world });
+
+        YalnDrawItem item;
+        item.gpuMesh  = &m_gpuMeshes[it->second];
+        item.world    = instance.world;
+        item.material = instance.drawable->material();
+        item.passMask = instance.drawable->passMask();
+        item.pipelineOverride = instance.drawable->pipelineOverride();
+        item.mesh     = instance.drawable->mesh();
+
+        glm::vec3 localMin(0.0f);
+        glm::vec3 localMax(0.0f);
+        if (item.mesh != nullptr && item.mesh->getLocalBounds(localMin, localMax))
+        {
+            const std::array<glm::vec3, 8> corners = {
+                glm::vec3(localMin.x, localMin.y, localMin.z),
+                glm::vec3(localMax.x, localMin.y, localMin.z),
+                glm::vec3(localMin.x, localMax.y, localMin.z),
+                glm::vec3(localMax.x, localMax.y, localMin.z),
+                glm::vec3(localMin.x, localMin.y, localMax.z),
+                glm::vec3(localMax.x, localMin.y, localMax.z),
+                glm::vec3(localMin.x, localMax.y, localMax.z),
+                glm::vec3(localMax.x, localMax.y, localMax.z)
+            };
+
+            item.boundsMin = glm::vec3(std::numeric_limits<float>::max());
+            item.boundsMax = glm::vec3(std::numeric_limits<float>::lowest());
+
+            for (const glm::vec3& corner : corners)
+            {
+                const glm::vec3 worldCorner =
+                    glm::vec3(instance.world * glm::vec4(corner, 1.0f));
+                item.boundsMin = glm::min(item.boundsMin, worldCorner);
+                item.boundsMax = glm::max(item.boundsMax, worldCorner);
+            }
+        }
+
+        m_drawItems.push_back(item);
     }
 }
 
@@ -110,15 +148,22 @@ bool YalnScene::buildGpuBuffers(const IYalnDevice& device, const vk::raii::Comma
     for (size_t i = 0; i < m_meshes.size(); ++i)
     {
         YalnMesh* mesh = m_meshes[i];
-        const auto& vertices = mesh->getVertices();
         const auto& indices  = mesh->getIndices();
+        const void* vertexData = mesh->getVertexData();
+        const size_t vertexCount = mesh->getVertexCount();
+        const size_t vertexStride = mesh->getVertexStride();
+
+        if (vertexData == nullptr || vertexCount == 0 || vertexStride == 0 || indices.empty())
+        {
+            continue;
+        }
 
         YalnGpuMesh gpuMesh;
         gpuMesh.indexCount = static_cast<uint32_t>(indices.size());
 
-        const vk::DeviceSize vertexSize = sizeof(vertices[0]) * vertices.size();
+        const vk::DeviceSize vertexSize = vertexStride * vertexCount;
         if (!YalnBuffer::uploadDeviceLocal(device, commandPool,
-                                           vertices.data(), vertexSize,
+                                           vertexData, vertexSize,
                                            vk::BufferUsageFlagBits::eVertexBuffer,
                                            gpuMesh.vertexBuffer))
         {
@@ -138,7 +183,7 @@ bool YalnScene::buildGpuBuffers(const IYalnDevice& device, const vk::raii::Comma
         m_gpuMeshes.push_back(std::move(gpuMesh));
 
         std::cout << "YalnScene: mesh buffer created [" << i << "] (vertices: "
-                  << vertices.size() << ", indices: " << indices.size() << ")" << std::endl;
+                  << vertexCount << ", indices: " << indices.size() << ")" << std::endl;
     }
 
     return !m_gpuMeshes.empty();

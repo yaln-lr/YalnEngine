@@ -80,6 +80,61 @@ public:
     const std::vector<std::unique_ptr<YalnNode>>&     children()  const { return m_children; }
     const std::vector<std::unique_ptr<YalnDrawable>>& drawables() const { return m_drawables; }
 
+    // 递归设置整棵子树的材质 / Pass 掩码（便于按组切换外观）
+    void setMaterialRecursive(YalnMaterialHandle material)
+    {
+        for (const auto& drawable : m_drawables)
+        {
+            if (drawable != nullptr)
+            {
+                drawable->setMaterial(material);
+            }
+        }
+        for (const auto& child : m_children)
+        {
+            if (child != nullptr)
+            {
+                child->setMaterialRecursive(material);
+            }
+        }
+    }
+
+    void setPassMaskRecursive(uint32_t passMask)
+    {
+        for (const auto& drawable : m_drawables)
+        {
+            if (drawable != nullptr)
+            {
+                drawable->setPassMask(passMask);
+            }
+        }
+        for (const auto& child : m_children)
+        {
+            if (child != nullptr)
+            {
+                child->setPassMaskRecursive(passMask);
+            }
+        }
+    }
+
+    void setPipelineOverrideRecursive(YalnPipelineHandle pipeline)
+    {
+        for (const auto& drawable : m_drawables)
+        {
+            if (drawable != nullptr)
+            {
+                drawable->setPipelineOverride(pipeline);
+            }
+        }
+        for (const auto& child : m_children)
+        {
+            if (child != nullptr)
+            {
+                child->setPipelineOverrideRecursive(pipeline);
+            }
+        }
+    }
+
     // ---- 本节点变换（位置/缩放 Eigen 向量，朝向 Eigen 四元数）----
 
     void setPosition(const Eigen::Vector3f& p) { m_position = p; }

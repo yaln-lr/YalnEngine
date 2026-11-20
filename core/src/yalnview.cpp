@@ -1,4 +1,5 @@
 #include "../include/yalnview.h"
+#include "../include/yalnframe.h"
 
 #include <cmath>
 #include <fstream>
@@ -79,6 +80,83 @@ bool YalnView::setRenderer(std::unique_ptr<IYalnRenderer> impl)
 bool YalnView::setScene(std::unique_ptr<IYalnScene> impl)
 {
     YALN_VIEW_SET_IMPL(m_scene, "setScene")
+}
+
+bool YalnView::setFramePipeline(std::unique_ptr<IYalnFramePipeline> impl)
+{
+    if (impl == nullptr)
+    {
+        std::cerr << "[YalnView] setFramePipeline 不能为空，已忽略" << std::endl;
+        return false;
+    }
+
+    if (m_initialized)
+    {
+        if (m_renderer == nullptr)
+        {
+            return false;
+        }
+        return m_renderer->setFramePipeline(std::move(impl));
+    }
+
+    m_framePipeline = std::move(impl);
+    return true;
+}
+
+IYalnFramePipeline* YalnView::framePipeline() const
+{
+    if (m_renderer != nullptr)
+    {
+        if (IYalnFramePipeline* pipeline = m_renderer->framePipeline())
+        {
+            return pipeline;
+        }
+    }
+    return m_framePipeline.get();
+}
+
+YalnPipelineLibrary* YalnView::pipelineLibrary() const
+{
+    return m_renderer->pipelineLibrary();
+}
+
+YalnMaterialLibrary* YalnView::materialLibrary() const
+{
+    return m_renderer->materialLibrary();
+}
+
+YalnPipelineHandle YalnView::createPipeline(const YalnPipelineConfig& config,
+                                            const std::string&        name)
+{
+    if (!m_initialized || m_renderer == nullptr || m_renderer->pipelineLibrary() == nullptr)
+    {
+        std::cerr << "[YalnView] createPipeline: 初始化完成后才能创建管线" << std::endl;
+        return YALN_INVALID_PIPELINE;
+    }
+    if (m_shaderProgram == nullptr || !m_shaderProgram->isValid())
+    {
+        std::cerr << "[YalnView] createPipeline: 当前着色器程序不可用" << std::endl;
+        return YALN_INVALID_PIPELINE;
+    }
+
+    auto pipeline = std::make_unique<YalnGraphicsPipeline>();
+    if (!pipeline->create(*m_device, m_renderPass->handle(), config, *m_shaderProgram))
+    {
+        std::cerr << "[YalnView] createPipeline: 管线创建失败" << std::endl;
+        return YALN_INVALID_PIPELINE;
+    }
+
+    return m_renderer->pipelineLibrary()->addPipeline(std::move(pipeline), name);
+}
+
+YalnMaterialHandle YalnView::createMaterial(const YalnMaterialDesc& desc)
+{
+    if (!m_initialized || m_renderer == nullptr || m_renderer->materialLibrary() == nullptr)
+    {
+        std::cerr << "[YalnView] createMaterial: 初始化完成后才能创建材质" << std::endl;
+        return YALN_INVALID_MATERIAL;
+    }
+    return m_renderer->materialLibrary()->createMaterial(desc);
 }
 
 #undef YALN_VIEW_SET_IMPL
@@ -175,7 +253,18 @@ bool YalnView::initVulkan(const char* appName)
             return false;
         }
 
-        // 9. 渲染器：命令池/命令缓冲/同步对象/UBO/描述符（应用配置）
+        // 9. 帧级策略：在渲染器 initialize 之前注入，避免先创建默认策略再替换
+        if (m_framePipeline != nullptr)
+        {
+            if (!m_renderer->setFramePipeline(std::move(m_framePipeline)))
+            {
+                m_lastError = "Failed to set frame pipeline";
+                std::cerr << "[YalnView] " << m_lastError << std::endl;
+                return false;
+            }
+        }
+
+        // 10. 渲染器：命令池/命令缓冲/同步对象/UBO/描述符（应用配置）
         if (!m_renderer->initialize(*m_device, *m_swapChain, *m_pipeline, m_rendererConfig))
         {
             m_lastError = "Failed to initialize renderer";

@@ -5,11 +5,16 @@
 #include "../include/yalngraphicspipeline.h"
 #include "../include/yalnscene.h"
 #include "../include/yalnmesh.h"
+#include "../include/yalnframe.h"
+#include "../include/yalnforwardpipeline.h"
 
 #include <algorithm>
 #include <array>
 #include <iostream>
 #include <limits>
+#include <utility>
+
+YalnRenderer::~YalnRenderer() = default;
 
 // ======================== 初始化 ========================
 
@@ -18,8 +23,9 @@ bool YalnRenderer::initialize(const IYalnDevice&        device,
                               const IYalnPipeline&      pipeline,
                               const YalnRendererConfig& config)
 {
-    m_device = &device;
-    m_config = config;
+    m_device    = &device;
+    m_swapChain = &swapChain;
+    m_config    = config;
 
     // 同时飞行帧数不能超过交换链图像数量（防御性钳制，组合校验在 YalnView）
     m_maxFramesInFlight = std::clamp(config.maxFramesInFlight, 1u,
@@ -31,6 +37,24 @@ bool YalnRenderer::initialize(const IYalnDevice&        device,
     if (!createDescriptorSets(swapChain, pipeline))    return false;
     if (!createCommandBuffers(swapChain))              return false;
     if (!createSyncObjects(swapChain))                 return false;
+
+    // 默认 PSO 句柄 0：登记 YalnView 持有的默认管线（不接管所有权）
+    m_pipelineLibrary.clear();
+    const YalnPipelineHandle defaultPipeline = m_pipelineLibrary.addExternal(pipeline, "Default");
+
+    // 默认材质句柄 0：白色乘色 + 默认管线 + 参与全部 Pass
+    m_materialLibrary.clear();
+    m_materialLibrary.ensureDefault(defaultPipeline);
+
+    // 帧级策略：若调用方未预先注入，则使用默认 Forward
+    if (m_framePipeline == nullptr)
+    {
+        m_framePipeline = std::make_unique<YalnForwardFramePipeline>();
+    }
+    if (!m_framePipeline->initialize(device, swapChain))
+    {
+        return false;
+    }
 
     m_currentFrame = 0;
     m_initialized  = true;
@@ -44,6 +68,8 @@ bool YalnRenderer::recreate(const IYalnSwapChain& swapChain, const IYalnPipeline
         return false;
     }
 
+    m_swapChain = &swapChain;
+
     m_device->waitIdle();
     destroyFrameResources();
 
@@ -52,6 +78,18 @@ bool YalnRenderer::recreate(const IYalnSwapChain& swapChain, const IYalnPipeline
     if (!createDescriptorSets(swapChain, pipeline)) return false;
     if (!createCommandBuffers(swapChain))           return false;
     if (!createSyncObjects(swapChain))              return false;
+
+    // 默认管线可能已被替换：库为空时补登记
+    if (m_pipelineLibrary.size() == 0)
+    {
+        const YalnPipelineHandle defaultPipeline = m_pipelineLibrary.addExternal(pipeline, "Default");
+        m_materialLibrary.ensureDefault(defaultPipeline);
+    }
+
+    if (m_framePipeline != nullptr && !m_framePipeline->recreate(swapChain))
+    {
+        return false;
+    }
 
     m_currentFrame = 0;
     return true;
@@ -64,9 +102,55 @@ void YalnRenderer::shutdown()
         m_device->waitIdle();
     }
 
+    if (m_framePipeline != nullptr)
+    {
+        m_framePipeline->shutdown();
+        m_framePipeline.reset();
+    }
+
     destroyFrameResources();
+    m_pipelineLibrary.clear();
+    m_materialLibrary.clear();
     m_commandPool = nullptr;
+    m_swapChain = nullptr;
     m_initialized = false;
+}
+
+bool YalnRenderer::setFramePipeline(std::unique_ptr<IYalnFramePipeline>&& pipeline)
+{
+    if (pipeline == nullptr)
+    {
+        return false;
+    }
+
+    // 初始化后热替换：先确认新策略可初始化，再切换并关闭旧策略
+    if (m_initialized && m_device != nullptr && m_swapChain != nullptr)
+    {
+        m_device->waitIdle();
+        if (!pipeline->initialize(*m_device, *m_swapChain))
+        {
+            return false;
+        }
+        if (m_framePipeline != nullptr)
+        {
+            m_framePipeline->shutdown();
+        }
+        m_framePipeline = std::move(pipeline);
+        return true;
+    }
+
+    // 初始化前注入：保存，initialize() 时统一初始化
+    if (m_framePipeline != nullptr)
+    {
+        m_framePipeline->shutdown();
+    }
+    m_framePipeline = std::move(pipeline);
+    return true;
+}
+
+IYalnFramePipeline* YalnRenderer::framePipeline() const
+{
+    return m_framePipeline.get();
 }
 
 bool YalnRenderer::createCommandPool()
@@ -234,6 +318,8 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
         return FrameResult::NotReady;
     }
 
+    (void)pipeline; // 管线的选择已下沉到材质/管线库；保留参数用于兼容旧调用
+
     if (!scene.isReady() || renderPass.framebuffers().empty())
     {
         return FrameResult::NotReady;
@@ -295,7 +381,7 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
 
     // 录制
     recordCommandBuffer(*m_commandBuffers[imageIndex], imageIndex,
-                        swapChain, pipeline, renderPass, scene);
+                        swapChain, renderPass, scene, *camera);
 
     // 该图像是否仍被旧帧使用
     if (m_imagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -339,76 +425,37 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
 }
 
 void YalnRenderer::recordCommandBuffer(vk::CommandBuffer          commandBuffer,
-                             uint32_t                   imageIndex,
-                             const IYalnSwapChain&      swapChain,
-                             const IYalnPipeline&       pipeline,
-                             const IYalnRenderPass&     renderPass,
-                             const IYalnScene&          scene)
+                                       uint32_t                   imageIndex,
+                                       const IYalnSwapChain&      swapChain,
+                                       const IYalnRenderPass&     renderPass,
+                                       const IYalnScene&          scene,
+                                       const YalnCamera&          camera)
 {
-    const vk::Extent2D extent = swapChain.extent();
-
     commandBuffer.reset();
 
     const vk::CommandBufferBeginInfo beginInfo{};
     commandBuffer.begin(beginInfo);
 
-    // 清除值必须覆盖渲染通道全部 loadOp=eClear 的附件（VUID-00902）：
-    // 深度附件存在时需附带 DepthStencil 清除值（深度清 1 = 最远）
-    const vk::ClearColorValue clearColor(m_config.clearColor);
-    std::array<vk::ClearValue, 2> clearValues = {
-        vk::ClearValue(clearColor),
-        vk::ClearValue(vk::ClearDepthStencilValue(1.0f, 0))
-    };
-    const uint32_t clearCount = renderPass.hasDepth() ? 2u : 1u;
-
-    const vk::RenderPassBeginInfo renderPassInfo(
-        *renderPass.handle(),
-        *renderPass.framebuffers()[imageIndex],
-        { { 0, 0 }, extent },
-        clearCount, clearValues.data());
-
-    commandBuffer.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
-    commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle());
-
-    const vk::Viewport viewport(0.0f, 0.0f,
-                                static_cast<float>(extent.width),
-                                static_cast<float>(extent.height),
-                                0.0f, 1.0f);
-    commandBuffer.setViewport(0, viewport);
-    commandBuffer.setScissor(0, vk::Rect2D({ 0, 0 }, extent));
-
-    // 描述符集（管线未声明描述符布局时跳过）
-    if (!m_descriptorSets.empty())
+    if (m_framePipeline != nullptr)
     {
-        commandBuffer.bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            *pipeline.layout(),
-            0, *m_descriptorSets[imageIndex],
-            {});
-    }
+        YalnFrameContext context;
+        context.commandBuffer  = commandBuffer;
+        context.imageIndex     = imageIndex;
+        context.swapChain      = &swapChain;
+        context.renderPass     = &renderPass;
+        context.scene          = &scene;
+        context.camera         = &camera;
+        context.rendererConfig = &m_config;
+        context.pipelines      = &m_pipelineLibrary;
+        context.materials      = &m_materialLibrary;
 
-    // 场景树收集的绘制项（同一网格多处实例共享一份 GPU 缓冲）
-    for (const YalnDrawItem& item : scene.drawItems())
-    {
-        const YalnGpuMesh& gpuMesh = *item.gpuMesh;
-
-        commandBuffer.bindVertexBuffers(0, { gpuMesh.vertexBuffer.handle() }, { 0 });
-        commandBuffer.bindIndexBuffer(gpuMesh.indexBuffer.handle(), 0, vk::IndexType::eUint32);
-
-        // Push Constants：世界矩阵（管线未声明推常量时跳过）
-        if (pipeline.hasPushConstants())
+        if (!m_descriptorSets.empty() && imageIndex < m_descriptorSets.size())
         {
-            constexpr uint32_t size = sizeof(glm::mat4);
-            commandBuffer.pushConstants(
-                *pipeline.layout(),
-                vk::ShaderStageFlags{ vk::ShaderStageFlagBits::eVertex },
-                0u,
-                vk::ArrayProxy<const float>(size / sizeof(float), &item.world[0][0]));
+            context.frameDescriptorSet = *m_descriptorSets[imageIndex];
         }
 
-        commandBuffer.drawIndexed(gpuMesh.indexCount, 1, 0, 0, 0);
+        m_framePipeline->record(context);
     }
 
-    commandBuffer.endRenderPass();
     commandBuffer.end();
 }

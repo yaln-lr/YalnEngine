@@ -320,7 +320,10 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
 
     (void)pipeline; // 管线的选择已下沉到材质/管线库；保留参数用于兼容旧调用
 
-    if (!scene.isReady() || renderPass.framebuffers().empty())
+    // 空场景也继续渲染：让 FramePipeline 执行 beginRenderPass(clearColor) 清屏，
+    // drawItems 为空时自然跳过所有 draw call。这样未加载场景时背景显示
+    // rendererConfig.clearColor，而不是窗口默认底色。
+    if (renderPass.framebuffers().empty())
     {
         return FrameResult::NotReady;
     }

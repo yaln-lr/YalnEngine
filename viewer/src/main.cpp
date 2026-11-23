@@ -188,6 +188,11 @@ int main(int argc, char *argv[])
     ppc.depthWrite = true;
     viewer->setPipelineConfig(ppc);
 
+    // 背景清屏色：天空蓝（空场景时也会显示，因为 renderer 允许空场景渲染清屏）
+    YalnRendererConfig rc = YalnRendererConfig::makeDefault();
+    rc.clearColor = { 0.53f, 0.81f, 0.92f, 1.0f };  // 天空蓝
+    viewer->setRendererConfig(rc);
+
     // 初始化 Vulkan
     if (!viewer->initialize("Yaln Vulkan Viewer")) {
         QMessageBox::critical(&mainWindow, "Error", "Failed to initialize Vulkan!\n\n"

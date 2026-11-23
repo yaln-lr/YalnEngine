@@ -23,18 +23,19 @@
 //      着色器只做类型分支，不承担几何约定。
 // ============================================================================
 
-// 每盏灯在 GPU 上的表示（std140，48 字节，数组步长 48）
+// 每盏灯在 GPU 上的表示（std140，64 字节，数组步长 64）
 struct YALN_CORE_EXPORT YalnGPULight {
-    alignas(16) glm::vec4 position;   // 语义随类型变化：
-                                      //   平行光 xyz = 光线传播方向（单位向量）, w = 强度
-                                      //   点光   xyz = 世界坐标,               w = 强度
-                                      //   聚光   xyz = 世界坐标,               w = 强度
+    alignas(16) glm::vec4 position;   // xyz = 世界坐标（点光/聚光）；w = 强度
+    alignas(16) glm::vec4 direction;  // xyz = 光线传播方向（平行光/聚光，单位向量）；w 未用
     alignas(16) glm::vec4 color;      // rgb = 光色（0~1）, a 未用
     alignas(16) glm::vec4 params;     // x = 作用半径（点光/聚光，<=0 视为无效）
                                       // y = 内锥角余弦（聚光）
                                       // z = 外锥角余弦（聚光）
                                       // w = 类型编号（1 平行 / 2 点光 / 3 聚光）
 };
+
+static_assert(sizeof(YalnGPULight) == 64,
+              "YalnGPULight 必须保持 64 字节，与 shader 中的 Light 结构一致");
 
 // 光源类型编号（与 shader.frag 中分支一致）
 enum class YalnLightType {
@@ -105,9 +106,10 @@ public:
     YalnGPULight gpuData() const override
     {
         YalnGPULight gpu{};
-        gpu.position = glm::vec4(m_direction, m_intensity);
-        gpu.color    = glm::vec4(m_color, 0.0f);
-        gpu.params.w = static_cast<float>(YalnLightType::Directional);
+        gpu.position  = glm::vec4(0.0f, 0.0f, 0.0f, m_intensity);
+        gpu.direction = glm::vec4(m_direction, 0.0f);
+        gpu.color     = glm::vec4(m_color, 0.0f);
+        gpu.params.w  = static_cast<float>(YalnLightType::Directional);
         return gpu;
     }
 
@@ -186,10 +188,11 @@ public:
     YalnGPULight gpuData() const override
     {
         YalnGPULight gpu{};
-        gpu.position = glm::vec4(m_position, m_intensity);
-        gpu.color    = glm::vec4(m_color, 0.0f);
-        gpu.params   = glm::vec4(m_range, m_innerCos, m_outerCos,
-                                 static_cast<float>(YalnLightType::Spot));
+        gpu.position  = glm::vec4(m_position, m_intensity);
+        gpu.direction = glm::vec4(m_direction, 0.0f);
+        gpu.color     = glm::vec4(m_color, 0.0f);
+        gpu.params    = glm::vec4(m_range, m_innerCos, m_outerCos,
+                                  static_cast<float>(YalnLightType::Spot));
         return gpu;
     }
 

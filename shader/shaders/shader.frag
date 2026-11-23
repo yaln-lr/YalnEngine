@@ -9,7 +9,8 @@ layout(location = 0) out vec4 outColor;
 
 // 光源的 GPU 表示（必须与 core/include/yalnlight.h 的 YalnGPULight 一致）
 struct Light {
-    vec4 position;   // 平行光: xyz=方向 w=强度；点光/聚光: xyz=位置 w=强度
+    vec4 position;   // xyz=世界坐标（点光/聚光） w=强度
+    vec4 direction;  // xyz=光线传播方向（平行光/聚光）
     vec4 color;      // rgb=光色
     vec4 params;     // x=range, y=内锥余弦, z=外锥余弦, w=类型(1/2/3)
 };
@@ -55,8 +56,8 @@ void main() {
         float spotF = 1.0;
 
         if (type == 1) {
-            // 平行光：position.xyz = 光线传播方向，无衰减
-            Ldir = normalize(-L.position.xyz);
+            // 平行光：direction.xyz = 光线传播方向，无衰减
+            Ldir = normalize(-L.direction.xyz);
         } else {
             // 点光 / 聚光：position.xyz = 光源世界坐标
             vec3 toLight = L.position.xyz - worldPos;
@@ -70,8 +71,8 @@ void main() {
             atten = f * f;
 
             if (type == 3) {
-                // 聚光：光轴方向与"光源→片段"方向的夹角余弦
-                float cosA = dot(normalize(L.position.xyz), -Ldir);
+                // 聚光：direction.xyz = 光轴方向；与"光源→片段"方向的夹角余弦
+                float cosA = dot(normalize(L.direction.xyz), -Ldir);
                 // 内锥全亮 → 外锥线性过渡 → 外锥外熄灭（平方软化边缘）
                 float t = clamp((cosA - L.params.z) / max(L.params.y - L.params.z, 1e-4), 0.0, 1.0);
                 spotF = t * t;

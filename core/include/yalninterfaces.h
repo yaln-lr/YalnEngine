@@ -137,7 +137,8 @@ struct YALN_CORE_EXPORT YalnPipelineConfig {
 struct YALN_CORE_EXPORT YalnRendererConfig {
     uint32_t maxFramesInFlight = 2;
     uint32_t uniformBinding    = 0;
-    std::array<float, 4> clearColor = { 0.0f, 0.1f, 0.25f, 1.0f };
+    // 清除色（渲染窗口背景）：天空蓝——空场景与已加载场景共用同一片"天空"
+    std::array<float, 4> clearColor = { 0.53f, 0.78f, 0.92f, 1.0f };
 
     static YalnRendererConfig makeDefault() { return {}; }
 };

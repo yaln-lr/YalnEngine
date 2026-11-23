@@ -1,6 +1,0 @@
-set(__QT_DEPLOY_TARGET_yaln_core_FILE F:/YalnEngine/build/mingw/core/libyaln_core.dll)
-set(__QT_DEPLOY_TARGET_yaln_core_TYPE SHARED_LIBRARY)
-set(__QT_DEPLOY_TARGET_yaln_core_RUNTIME_DLLS )
-set(__QT_DEPLOY_TARGET_yalnviewer_FILE F:/YalnEngine/build/mingw/viewer/yalnviewer.exe)
-set(__QT_DEPLOY_TARGET_yalnviewer_TYPE EXECUTABLE)
-set(__QT_DEPLOY_TARGET_yalnviewer_RUNTIME_DLLS D:/QT6/6.11.0/mingw_64/bin/Qt6Widgets.dll;F:/YalnEngine/build/mingw/core/libyaln_core.dll;D:/QT6/6.11.0/mingw_64/bin/Qt6Gui.dll;D:/QT6/6.11.0/mingw_64/bin/Qt6Core.dll)

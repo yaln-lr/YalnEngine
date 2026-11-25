@@ -30,10 +30,16 @@ endif()
 set(VIEWER_SOURCES
     src/main.cpp
     src/qtviewer.cpp
+    src/mainwin.cpp
+    src/yalnscenefactory.cpp
+    src/yalnrendermodecontroller.cpp
 )
 
 set(VIEWER_HEADERS
     include/qtviewer.h
+    include/mainwin.h
+    include/yalnscenefactory.h
+    include/yalnrendermodecontroller.h
 )
 
 # 创建可执行文件

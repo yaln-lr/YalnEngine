@@ -48,8 +48,13 @@ if(GLSLC_EXECUTABLE)
         COMMAND ${GLSLC_EXECUTABLE} ${SHADER_DIR}/shader.frag -o ${SPV_DIR}/shader.frag.spv
         DEPENDS ${SHADER_DIR}/shader.frag COMMENT "Compiling fragment shader")
 
+    # 白膜专用片元着色器（忽略顶点色，输出中性白 + 光照）
+    add_custom_command(OUTPUT ${SPV_DIR}/white.frag.spv
+        COMMAND ${GLSLC_EXECUTABLE} ${SHADER_DIR}/white.frag -o ${SPV_DIR}/white.frag.spv
+        DEPENDS ${SHADER_DIR}/white.frag COMMENT "Compiling white-model fragment shader")
+
     add_custom_target(compile_shaders ALL
-        DEPENDS ${SPV_DIR}/shader.vert.spv ${SPV_DIR}/shader.frag.spv)
+        DEPENDS ${SPV_DIR}/shader.vert.spv ${SPV_DIR}/shader.frag.spv ${SPV_DIR}/white.frag.spv)
         
 else()
     message(WARNING "glslc not found, shader compilation skipped")

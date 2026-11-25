@@ -28,16 +28,21 @@ YalnEngine/
 │   └── src/                    # 实现文件
 ├── viewer/                     # Qt 桌面查看器（主应用，村庄示例场景）
 │   ├── include/qtviewer.h      # QtViewer（QWidget + 渲染循环定时器）
-│   └── src/main.cpp            # 村庄场景构建 + 菜单/相机/灯光布置
+│   ├── include/mainwin.h       # YalnMainWin（窗口/菜单/状态栏/初始化装配）
+│   ├── include/yalnscenefactory.h    # YalnSceneFactory（村庄场景工厂，资产持有网格）
+│   ├── include/yalnrendermodecontroller.h # 渲染模式控制器（白膜/线框/叠加）
+│   └── src/main.cpp            # 入口：装配 QApplication + YalnMainWin
 ├── shader/shaders/             # 共享着色器源码（GLSL，构建时编译到 build/mingw/shaders）
 │   ├── shader.vert             # 顶点着色器（GLSL）
-│   └── shader.frag             # 片段着色器（Blinn-Phong 光照，GLSL）
+│   ├── shader.frag             # 片段着色器（Blinn-Phong 光照，GLSL）
+│   └── white.frag              # 白膜片元着色器（忽略顶点色，GLSL）
 ├── docs/                       # 设计文档
 │   ├── 渲染管线接口使用说明.md   # 帧策略/Pass/材质/管线扩展点
+│   ├── Viewer渲染模式与MainWindow重构.md # 渲染模式/场景工厂/主窗口重构
 │   ├── 灯光系统设计说明.md      # 灯光架构、法线方案、衰减模型、v2 方向
 │   └── 灯光使用说明.md          # 四类光源 API、调参指南、FAQ
 ├── thirdparty/                 # 第三方依赖（DLL、Eigen 头文件）
-├── build/                      # 构建输出目录
+├── build/                      # 构建输出目录（已由 .gitignore 忽略）
 │   └── mingw/viewer/           # yalnviewer.exe 及运行时资源
 ├── KEYBOARD_CONTROLS.md        # 键盘控制说明
 └── README.md
@@ -78,6 +83,8 @@ $env:PATH       = "D:/msys64/ucrt64/bin;f:/YalnEngine/build/mingw/core;D:/QT6/6.
 $env:VK_LAYER_PATH = "D:/VulkanSDK/1.4.341.1/Bin"
 ```
 
+常用命令行参数（自动化 / CI）：`--load-village`（启动即加载场景）、`--mode=0..4`（切换渲染模式）、`--quit-after=秒`（定时退出）、`--demo-render-extension`（旧材质示例）。
+
 ### VS Code
 
 - **编译**: `Ctrl+Shift+B`
@@ -91,9 +98,21 @@ $env:VK_LAYER_PATH = "D:/VulkanSDK/1.4.341.1/Bin"
 | 操作 | 功能 |
 |------|------|
 | `场景(S)` → `加载村庄场景` | 构建并显示村庄示例场景（含灯光），快捷键 `Ctrl+L` |
-| `场景(S)` → `应用材质/管线示例` | 需先加载场景：风车换材质乘色，1~3 号山体切换为线框 PSO |
+| `场景(S)` → `应用材质/管线示例` | 需先加载场景：风车组换材质乘色（同管线、不同材质） |
 
-程序启动时为空场景，需先从菜单加载；重复加载会先清空旧场景再重建（网格为 static 对象复用，GPU 缓冲按需重建）。
+程序启动时为空场景，需先从菜单加载；重复加载会先 `waitIdle` 清空旧场景再整体替换（网格由场景工厂的 `YalnSceneAsset` 持有，GPU 缓冲按需重建）。
+
+### 渲染模式菜单
+
+| 操作 | 功能 |
+|------|------|
+| `View` → `渲染模式` → `正常渲染` | 原顶点色 + 原管线（默认） |
+| `…` → `白膜渲染` | 白膜 shader 忽略顶点色，只按光照显示中性白 |
+| `…` → `网格渲染` | 保留原颜色，全部物体改用线框 PSO |
+| `…` → `白膜+网格` | 白膜之上叠加一层青绿线框 |
+| `…` → `正常+网格` | 原色填充之上叠加一层线框 |
+
+切换只改 drawable 的材质句柄 / 管线覆盖与叠加 Pass 开关，不重建 GPU 资源，任意时刻可切、下一帧生效；线框 PSO 带深度偏移并关闭深度写入，避免与实体共面 z-fighting（详见 `docs/Viewer渲染模式与MainWindow重构.md`）。
 
 ### 村庄示例场景（viewer）
 
@@ -131,6 +150,7 @@ $env:VK_LAYER_PATH = "D:/VulkanSDK/1.4.341.1/Bin"
 | `+` / `=` | 放大 |
 | `-` | 缩小 |
 | `R` | 重置所有变换 |
+| `ESC` | 退出程序 |
 
 ## 技术特性
 
@@ -149,6 +169,7 @@ $env:VK_LAYER_PATH = "D:/VulkanSDK/1.4.341.1/Bin"
 - **验证层**: Debug 模式下启用 Vulkan 验证层
 - **着色器自动编译**: 构建时使用 glslc 自动编译 GLSL 着色器
 - **交互控制**: 键盘 + 鼠标实时控制相机，菜单控制场景加载与自动旋转
+- **渲染模式切换**: 正常 / 白膜 / 网格 / 白膜+网格 / 正常+网格 五种模式，切换只改材质句柄与管线覆盖、不重建 GPU 资源；白膜走独立 shader，线框经深度偏移叠加（详见 `docs/Viewer渲染模式与MainWindow重构.md`）
 
 ## 核心 API
 
@@ -214,7 +235,7 @@ if (YalnNode* node = scene.root()->find("mountain1")) {
 }
 ```
 
-viewer 的「场景 → 应用材质/管线示例」菜单即使用上述路径；自定义配置需与当前渲染通道、描述符布局保持一致，更多扩展方式见 `docs/渲染管线接口使用说明.md`。
+viewer 的「场景 → 应用材质/管线示例」菜单演示了材质挂接；白膜与线框叠加效果改由 `View → 渲染模式` 提供。自定义配置需与当前渲染通道、描述符布局保持一致，更多扩展方式见 `docs/渲染管线接口使用说明.md`。
 
 ## License
 

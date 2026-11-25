@@ -118,6 +118,12 @@ public:
     YalnPipelineHandle createPipeline(const YalnPipelineConfig& config,
                                       const std::string&        name = {});
 
+    // 使用调用方提供的着色器程序创建管线（例如白膜/线框等需要不同 shader 的 PSO）。
+    // shaderProgram 必须已 load()；管线只引用它，不接管所有权。
+    YalnPipelineHandle createPipeline(const YalnPipelineConfig& config,
+                                      const IYalnShaderProgram& shaderProgram,
+                                      const std::string&        name = {});
+
     // 便捷扩展：创建材质（句柄用于 YalnDrawable::setMaterial）
     YalnMaterialHandle createMaterial(const YalnMaterialDesc& desc);
 

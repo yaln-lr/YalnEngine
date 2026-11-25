@@ -149,6 +149,31 @@ YalnPipelineHandle YalnView::createPipeline(const YalnPipelineConfig& config,
     return m_renderer->pipelineLibrary()->addPipeline(std::move(pipeline), name);
 }
 
+YalnPipelineHandle YalnView::createPipeline(const YalnPipelineConfig& config,
+                                            const IYalnShaderProgram& shaderProgram,
+                                            const std::string&        name)
+{
+    if (!m_initialized || m_renderer == nullptr || m_renderer->pipelineLibrary() == nullptr)
+    {
+        std::cerr << "[YalnView] createPipeline: 初始化完成后才能创建管线" << std::endl;
+        return YALN_INVALID_PIPELINE;
+    }
+    if (!shaderProgram.isValid())
+    {
+        std::cerr << "[YalnView] createPipeline: 提供的着色器程序不可用" << std::endl;
+        return YALN_INVALID_PIPELINE;
+    }
+
+    auto pipeline = std::make_unique<YalnGraphicsPipeline>();
+    if (!pipeline->create(*m_device, m_renderPass->handle(), config, shaderProgram))
+    {
+        std::cerr << "[YalnView] createPipeline: 管线创建失败" << std::endl;
+        return YALN_INVALID_PIPELINE;
+    }
+
+    return m_renderer->pipelineLibrary()->addPipeline(std::move(pipeline), name);
+}
+
 YalnMaterialHandle YalnView::createMaterial(const YalnMaterialDesc& desc)
 {
     if (!m_initialized || m_renderer == nullptr || m_renderer->materialLibrary() == nullptr)

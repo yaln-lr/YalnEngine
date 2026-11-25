@@ -108,6 +108,13 @@ struct YALN_CORE_EXPORT YalnPipelineConfig {
     bool          depthWrite     = false;
     vk::CompareOp depthCompareOp = vk::CompareOp::eLessOrEqual;
 
+    // 深度偏移（Depth Bias）：线框叠加到实体表面时避免 z-fighting。
+    // 负值让片元深度更靠近相机，从而画在实体之上。
+    bool  depthBiasEnable        = false;
+    float depthBiasConstantFactor = 0.0f;
+    float depthBiasClamp          = 0.0f;
+    float depthBiasSlopeFactor    = 0.0f;
+
     bool blendEnable = false;
     vk::BlendFactor blendSrcColorFactor = vk::BlendFactor::eSrcAlpha;
     vk::BlendFactor blendDstColorFactor = vk::BlendFactor::eOneMinusSrcAlpha;

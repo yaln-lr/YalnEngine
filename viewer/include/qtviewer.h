@@ -28,6 +28,7 @@ signals:
     void frameRendered(int frameIndex);
     void vulkanInitialized(bool success);
     void errorOccurred(const QString& error);
+    void escapePressed();
 
 public slots:
     void onFrameTimeout();

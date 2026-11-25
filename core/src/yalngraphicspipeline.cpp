@@ -99,8 +99,10 @@ bool YalnGraphicsPipeline::create(const IYalnDevice&          device,
         m_config.polygonMode,
         m_config.cullMode,
         m_config.frontFace,
-        VK_FALSE,
-        0.0f, 0.0f, 0.0f,
+        m_config.depthBiasEnable ? VK_TRUE : VK_FALSE,
+        m_config.depthBiasConstantFactor,
+        m_config.depthBiasClamp,
+        m_config.depthBiasSlopeFactor,
         m_config.lineWidth);
 
     vk::PipelineMultisampleStateCreateInfo multisampling(

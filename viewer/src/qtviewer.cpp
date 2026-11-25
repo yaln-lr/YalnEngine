@@ -172,6 +172,15 @@ void QtViewer::resizeEvent(QResizeEvent* event)
 
 void QtViewer::keyPressEvent(QKeyEvent* event)
 {
+    // Esc：直接通知主窗口退出。
+    // 不能依赖 QShortcut：本类 keyPressEvent 会 accept 事件，阻止其向父窗口传播。
+    if (event->key() == Qt::Key_Escape)
+    {
+        emit escapePressed();
+        event->accept();
+        return;
+    }
+
     handleKeyInput(event->key(), true);
     event->accept();
 }

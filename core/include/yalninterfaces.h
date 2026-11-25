@@ -175,6 +175,10 @@ struct YALN_CORE_EXPORT YalnDrawItem {
     // 材质句柄：默认 0；材质决定使用哪条管线、哪种材质参数
     YalnMaterialHandle material = YALN_DEFAULT_MATERIAL;
 
+    // 额外叠加材质：由对应 passMask 的逻辑 Pass 在 Opaque 之后叠加绘制。
+    // 每帧由 scene.update() 从 drawable 拷贝，属于每帧快照。
+    std::vector<YalnMaterialHandle> overlayMaterials;
+
     // 该绘制项参与的 Pass 位掩码（默认全部 Pass）
     uint32_t passMask = YALN_PASS_MASK_ALL;
 

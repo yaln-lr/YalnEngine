@@ -135,6 +135,43 @@ public:
         }
     }
 
+    // 递归给整棵子树的所有 drawable 添加/清空叠加材质
+    void addOverlayMaterialRecursive(YalnMaterialHandle material)
+    {
+        for (const auto& drawable : m_drawables)
+        {
+            if (drawable != nullptr)
+            {
+                drawable->addOverlayMaterial(material);
+            }
+        }
+        for (const auto& child : m_children)
+        {
+            if (child != nullptr)
+            {
+                child->addOverlayMaterialRecursive(material);
+            }
+        }
+    }
+
+    void clearOverlayMaterialsRecursive()
+    {
+        for (const auto& drawable : m_drawables)
+        {
+            if (drawable != nullptr)
+            {
+                drawable->clearOverlayMaterials();
+            }
+        }
+        for (const auto& child : m_children)
+        {
+            if (child != nullptr)
+            {
+                child->clearOverlayMaterialsRecursive();
+            }
+        }
+    }
+
     // ---- 本节点变换（位置/缩放 Eigen 向量，朝向 Eigen 四元数）----
 
     void setPosition(const Eigen::Vector3f& p) { m_position = p; }

@@ -3,7 +3,9 @@
 
 #include <glm/glm.hpp>
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 #include "global_type.h"
 #include "yalnmath.h"
@@ -35,8 +37,24 @@ public:
 
     // 材质与 Pass 选择（默认值保持旧行为：默认材质、参与全部 Pass）。
     // 派生绘制项可覆盖，实现按对象/按状态切换材质或 Pass。
+    // 主材质：由 setMaterial 设置，Opaque Pass 使用它。
     virtual YalnMaterialHandle material() const { return YALN_DEFAULT_MATERIAL; }
     virtual void setMaterial(YalnMaterialHandle material) { (void)material; }
+
+    // 额外叠加材质：每个 drawable 独立持有，由对应 passMask 的 Pass 叠加绘制。
+    // 默认空实现，旧派生类无需修改。
+    virtual const std::vector<YalnMaterialHandle>& overlayMaterials() const
+    {
+        static const std::vector<YalnMaterialHandle> empty;
+        return empty;
+    }
+    virtual void addOverlayMaterial(YalnMaterialHandle material) { (void)material; }
+    virtual bool removeOverlayMaterial(YalnMaterialHandle material)
+    {
+        (void)material;
+        return false;
+    }
+    virtual void clearOverlayMaterials() {}
 
     virtual uint32_t passMask() const { return YALN_PASS_MASK_ALL; }
     virtual void setPassMask(uint32_t passMask) { (void)passMask; }
@@ -70,6 +88,26 @@ public:
     YalnMaterialHandle material() const override { return m_material; }
     void setMaterial(YalnMaterialHandle material) override { m_material = material; }
 
+    const std::vector<YalnMaterialHandle>& overlayMaterials() const override
+    {
+        return m_overlayMaterials;
+    }
+    void addOverlayMaterial(YalnMaterialHandle material) override
+    {
+        m_overlayMaterials.push_back(material);
+    }
+    bool removeOverlayMaterial(YalnMaterialHandle material) override
+    {
+        const auto it = std::find(m_overlayMaterials.begin(), m_overlayMaterials.end(), material);
+        if (it == m_overlayMaterials.end())
+        {
+            return false;
+        }
+        m_overlayMaterials.erase(it);
+        return true;
+    }
+    void clearOverlayMaterials() override { m_overlayMaterials.clear(); }
+
     uint32_t passMask() const override { return m_passMask; }
     void setPassMask(uint32_t passMask) override { m_passMask = passMask; }
 
@@ -102,6 +140,7 @@ private:
     bool      m_visible = true;
 
     YalnMaterialHandle m_material = YALN_DEFAULT_MATERIAL;
+    std::vector<YalnMaterialHandle> m_overlayMaterials;
     uint32_t           m_passMask = YALN_PASS_MASK_ALL;
     YalnPipelineHandle m_pipelineOverride = YALN_INVALID_PIPELINE;
 

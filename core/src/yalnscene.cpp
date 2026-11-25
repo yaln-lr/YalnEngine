@@ -52,6 +52,7 @@ void YalnScene::update(const glm::vec3& cameraPosition)
         item.gpuMesh  = &m_gpuMeshes[it->second];
         item.world    = instance.world;
         item.material = instance.drawable->material();
+        item.overlayMaterials = instance.drawable->overlayMaterials();
         item.passMask = instance.drawable->passMask();
         item.pipelineOverride = instance.drawable->pipelineOverride();
         item.mesh     = instance.drawable->mesh();

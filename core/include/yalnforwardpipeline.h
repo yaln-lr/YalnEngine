@@ -11,10 +11,13 @@
 // ============================================================================
 //  YalnForwardFramePipeline —— 默认 Forward 整帧策略
 //
-//  默认只包含一个 YalnForwardOpaquePass。FramePipeline 负责主渲染通道的
-//  begin/end、清屏与 viewport/scissor；可通过 addPass() 追加共享主通道的
-//  逻辑 Pass（例如 Outline / Transparent），或整体替换为自定义策略。
-//  需要独立渲染目标的 Pass（如 Shadow）应使用自定义 IYalnFramePipeline。
+//  默认包含两个逻辑 Pass：
+//    - YalnForwardOpaquePass              主材质（item.material）
+//    - YalnMaterialOverlayPass(Outline)   叠加材质（item.overlayMaterials[]）
+//  FramePipeline 负责主渲染通道的 begin/end、清屏与 viewport/scissor。
+//  可通过 addPass() 追加更多阶段的叠加 Pass（例如 Transparent），
+//  或整体替换为自定义策略；需要独立渲染目标的 Pass（如 Shadow）应使用
+//  自定义 IYalnFramePipeline。
 // ============================================================================
 class YALN_CORE_EXPORT YalnForwardFramePipeline : public IYalnFramePipeline
 {

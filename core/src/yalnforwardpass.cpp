@@ -18,52 +18,67 @@ struct ResolvedItem
     const IYalnPipeline* pipeline = nullptr;
     YalnPipelineHandle pipelineHandle = YALN_DEFAULT_PIPELINE;
 };
-}
 
-void YalnForwardOpaquePass::record(const YalnFrameContext& context)
+enum class MaterialSource
 {
-    // 默认 Forward 的 FramePipeline 负责 beginRenderPass / viewport / endRenderPass；
-    // 本 Pass 只在当前激活的渲染通道内录制绘制命令。
+    Primary,   // item.material
+    Overlay    // item.overlayMaterials[]
+};
+
+// OpaquePass 与 MaterialOverlayPass 共用的批处理实现。
+// 两者在 Vulkan 层共享同一个 RenderPass，只是数据来源和 passMask 不同。
+void recordMaterialPass(const YalnFrameContext& context,
+                        YalnPassKind           pass,
+                        MaterialSource         source)
+{
     if (context.commandBuffer == VK_NULL_HANDLE || context.scene == nullptr)
     {
         return;
     }
 
-    // ---- 1. 解析绘制项：材质 → 管线 ----
-    const uint32_t passBit = passMask();
+    const uint32_t passBit = toPassMask(pass);
     std::vector<ResolvedItem> resolved;
-    resolved.reserve(context.scene->drawItems().size());
 
-    for (const YalnDrawItem& item : context.scene->drawItems())
+    auto resolve = [&](const YalnDrawItem& item, YalnMaterialHandle handle)
     {
         if (item.gpuMesh == nullptr || (item.passMask & passBit) == 0)
         {
-            continue;
+            return;
         }
 
         const YalnMaterial* material = nullptr;
-        YalnMaterialHandle materialHandle = YALN_INVALID_MATERIAL;
+        YalnMaterialHandle materialHandle = handle;
         if (context.materials != nullptr)
         {
-            material = context.materials->get(item.material);
-            materialHandle = item.material;
+            material = context.materials->get(handle);
             if (material == nullptr)
             {
+                if (source == MaterialSource::Overlay)
+                {
+                    // 无效叠加材质：直接跳过，不回退默认材质（否则会意外重画一遍）
+                    return;
+                }
                 material = context.materials->get(YALN_DEFAULT_MATERIAL);
                 materialHandle = YALN_DEFAULT_MATERIAL;
             }
         }
 
+        // 材质自身的 passMask 同样必须包含当前 Pass 位
         if (material != nullptr && (material->passMask() & passBit) == 0)
         {
-            continue;
+            return;
         }
 
-        YalnPipelineHandle pipelineHandle = item.pipelineOverride;
+        // pipelineOverride 仅主材质路径 honor；叠加材质完全由材质自身决定。
+        YalnPipelineHandle pipelineHandle = YALN_INVALID_PIPELINE;
+        if (source == MaterialSource::Primary)
+        {
+            pipelineHandle = item.pipelineOverride;
+        }
         if (pipelineHandle == YALN_INVALID_PIPELINE)
         {
             pipelineHandle = material != nullptr
-                ? material->pipelineForPass(YalnPassKind::Opaque)
+                ? material->pipelineForPass(pass)
                 : YALN_DEFAULT_PIPELINE;
         }
 
@@ -80,7 +95,7 @@ void YalnForwardOpaquePass::record(const YalnFrameContext& context)
 
         if (pipeline == nullptr || !pipeline->isValid())
         {
-            continue;
+            return;
         }
 
         ResolvedItem entry;
@@ -90,9 +105,29 @@ void YalnForwardOpaquePass::record(const YalnFrameContext& context)
         entry.pipeline       = pipeline;
         entry.pipelineHandle = resolvedHandle;
         resolved.push_back(entry);
+    };
+
+    for (const YalnDrawItem& item : context.scene->drawItems())
+    {
+        if (source == MaterialSource::Primary)
+        {
+            resolve(item, item.material);
+        }
+        else
+        {
+            for (const YalnMaterialHandle handle : item.overlayMaterials)
+            {
+                resolve(item, handle);
+            }
+        }
     }
 
-    // ---- 2. 批处理：pipeline → material → mesh ----
+    if (resolved.empty())
+    {
+        return;
+    }
+
+    // 批处理：pipeline → material → mesh
     std::sort(resolved.begin(), resolved.end(),
               [](const ResolvedItem& a, const ResolvedItem& b)
               {
@@ -107,7 +142,7 @@ void YalnForwardOpaquePass::record(const YalnFrameContext& context)
                   return std::less<const YalnGpuMesh*>()(a.item->gpuMesh, b.item->gpuMesh);
               });
 
-    // ---- 3. 按批绘制（渲染通道已由 FramePipeline 开始）----
+    // 按批绘制（渲染通道已由 FramePipeline 开始）
     const IYalnPipeline* boundPipeline = nullptr;
     const YalnGpuMesh*   boundMesh     = nullptr;
 
@@ -118,7 +153,8 @@ void YalnForwardOpaquePass::record(const YalnFrameContext& context)
 
         if (&pipeline != boundPipeline)
         {
-            context.commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.handle());
+            context.commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                               *pipeline.handle());
 
             if (context.frameDescriptorSet != VK_NULL_HANDLE && pipeline.hasDescriptorSets())
             {
@@ -167,4 +203,17 @@ void YalnForwardOpaquePass::record(const YalnFrameContext& context)
 
         context.commandBuffer.drawIndexed(item.gpuMesh->indexCount, 1, 0, 0, 0);
     }
+}
+}  // namespace
+
+void YalnForwardOpaquePass::record(const YalnFrameContext& context)
+{
+    // 主材质阶段：只画 item.material，honor pipelineOverride（兼容保留）
+    recordMaterialPass(context, YalnPassKind::Opaque, MaterialSource::Primary);
+}
+
+void YalnMaterialOverlayPass::record(const YalnFrameContext& context)
+{
+    // 叠加材质阶段：画 item.overlayMaterials[]，完全由材质决定管线
+    recordMaterialPass(context, m_pass, MaterialSource::Overlay);
 }

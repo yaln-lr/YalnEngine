@@ -28,6 +28,13 @@ core/src/yalngraphicspipeline.cpp      （应用 depthBias 到 rasterizer）
 core/include/yalnview.h / src/yalnview.cpp （新增 createPipeline(shaderProgram) 重载）
 shader/shaders/white.frag              （新增白膜专用片元着色器）
 shader/CMakeLists.txt                  （新增 white.frag.spv 编译目标）
+viewer/include/yalnmodematerial.h / src/yalnmodematerial.cpp （特殊材质类）
+core/include/yalndrawable.h            （主材质 / 叠加材质列表 / 递归接口）
+core/include/yalnnode.h                （叠加材质递归辅助）
+core/include/yalninterfaces.h          （YalnDrawItem 增加 overlayMaterials）
+core/src/yalnscene.cpp                 （每帧收集叠加材质快照）
+core/src/yalnforwardpass.cpp           （OpaquePass + 通用叠加材质 Pass 共用批处理）
+core/src/yalnforwardpipeline.cpp       （默认追加 YalnMaterialOverlayPass(Outline)）
 viewer/src/main.cpp                    （极简化）
 viewer/include/qtviewer.h / src/qtviewer.cpp  （新增 escapePressed 信号）
 viewer/CMakeLists.txt                  （新增源文件）
@@ -52,17 +59,42 @@ enum class YalnRenderMode : uint8_t
 };
 ```
 
-### 2.2 实现矩阵
+### 2.2 实现矩阵（方案 A + 材质驱动）
 
-| 模式 | 填充 | 管线 | 叠加 Pass |
-|---|---|---|---|
-| Normal | 原顶点色 | 原管线 | 关闭 |
-| WhiteModel | 白膜 shader（忽略顶点色） | 白膜 PSO（`pipelineOverride`） | 关闭 |
-| Wireframe | 原顶点色 | 线框 PSO（`pipelineOverride`） | 关闭 |
-| WhiteAndWire | 白膜 shader | 白膜 PSO（`pipelineOverride`） | `YalnWireframeOverlayPass`（开启） |
-| NormalAndWire | 原顶点色（正常材质） | 原管线 | `YalnWireframeOverlayPass`（开启） |
+模式切换完全由 drawable 上的材质驱动，控制器不再持有 `pipelineOverride` 调用或任何 Pass 指针：
 
-`NormalAndWire`（正常渲染 + 网格）保留物体的原始顶点色/材质作为填充，再叠加一层线框，适合查看带颜色模型的网格结构；它不需要白膜 PSO，只需要线框 PSO 和叠加 Pass。
+| 模式 | 主材质 | 叠加材质 |
+|---|---|---|
+| Normal | 原材质 | 清空 |
+| WhiteModel | `Mode.White`（白膜材质） | 清空 |
+| Wireframe | `Mode.Wire`（线框材质） | 清空 |
+| WhiteAndWire | `Mode.White` | 添加 `Mode.Wire` |
+| NormalAndWire | 原材质 | 添加 `Mode.Wire` |
+
+**特殊材质类（viewer/include/yalnmodematerial.h）**
+
+白膜与网格材质已封装成独立的特殊材质类，控制器不再直接创建 PSO / shader / 材质：
+
+```cpp
+class YalnModeMaterial                  // 抽象基类：持有 YalnView&、PSO 句柄、材质句柄
+{
+public:
+    virtual bool create() = 0;          // 懒创建，幂等
+    YalnMaterialHandle handle() const;
+    YalnPipelineHandle pipeline() const;
+};
+
+class YalnWhiteModelMaterial : public YalnModeMaterial  // 白膜：白膜 shader + PSO + 材质
+class YalnWireframeMaterial  : public YalnModeMaterial  // 网格：线框 PSO + 材质
+```
+
+这是包装类而非 `YalnMaterial` 子类——后者由材质库以 `unique_ptr<YalnMaterial>` 持有且析构非虚，不能安全继承。特殊材质类负责创建专用 PSO、登记材质，对外只暴露句柄。
+
+- `Mode.White` 引用白膜 PSO（白膜 shader，忽略顶点色），`passMask = Opaque`；
+- `Mode.Wire` 引用线框 PSO（depthBias + 不写深度），`passMask = Opaque | Outline`，因此既能作主材质画线框，也能作叠加材质叠加；
+- 默认 Forward 的 Pass 列表为两个逻辑 Pass：`YalnForwardOpaquePass`（画 `item.material`）+ `YalnMaterialOverlayPass(Outline)`（画 `item.overlayMaterials[]`）；
+- 两个 Pass 共享同一份批处理实现（core/src/yalnforwardpass.cpp），OpaquePass 主材质路径仍 honor 兼容保留的 `pipelineOverride`，叠加材质路径完全由材质决定；
+- 叠加 Pass 常驻且无 enable 开关：没有叠加材质时它不录任何命令。
 
 > 早期版本曾用“默认白色材质”实现白膜，但因为物体颜色来自**顶点色**（`albedo = fragColor * base_color`），白色乘色不会改变顶点色，导致白膜与正常渲染完全一样。现已改为独立 shader 方案。
 
@@ -70,7 +102,7 @@ enum class YalnRenderMode : uint8_t
 
 **线框 PSO（带深度偏移）**
 
-首次进入线框相关模式时，`ensureWirePipeline()` 以默认配置为模板创建：
+首次进入线框相关模式时，`YalnWireframeMaterial::create()` 以默认配置为模板创建：
 
 ```cpp
 config.polygonMode = vk::PolygonMode::eLine;
@@ -104,24 +136,24 @@ YalnPipelineHandle createPipeline(const YalnPipelineConfig& config,
                                   const std::string& name = {});
 ```
 
-控制器持有一个 `YalnSpirvShaderProgram("../shaders/shader.vert.spv", "../shaders/white.frag.spv")`，用它创建白膜 PSO（句柄 1）。`shader/CMakeLists.txt` 增加了 `white.frag.spv` 的编译目标。
+`YalnWhiteModelMaterial` 持有一个 `YalnSpirvShaderProgram("../shaders/shader.vert.spv", "../shaders/white.frag.spv")`，`create()` 用它创建白膜 PSO 并登记 `Mode.White` 材质。`shader/CMakeLists.txt` 增加了 `white.frag.spv` 的编译目标。
 
-白膜模式通过 `pipelineOverride = 白膜 PSO` 让 Opaque Pass 使用白膜 shader；由于 shader 不读顶点色也不读 `base_color`，材质保持原样即可。`WhiteAndWire` 模式的白膜填充同样使用该 PSO。
+白膜模式把所有 drawable 的主材质换成 `Mode.White`（引用白膜 PSO），Opaque Pass 因此走白膜 shader；shader 不读顶点色也不读 `base_color`。`WhiteAndWire` 模式同样以它作主材质。
 
 **白膜 + 网格叠加 Pass**
 
-`YalnWireframeOverlayPass` 是 `IYalnFramePass` 的实现，追加到 `YalnForwardFramePipeline` 的 Pass 列表末尾（Opaque 之后）。它：
+叠加绘制由 `YalnMaterialOverlayPass(YalnPassKind::Outline)` 完成，它在 `YalnForwardFramePipeline` 构造时就常驻在 Opaque 之后，没有 enable 开关。它：
 
-- 遍历 `context.scene->drawItems()`；
-- 固定使用线框 PSO；
-- push constants 使用青绿色 `baseColor`；
-- 通过 `setEnabled(bool)` 控制是否录制，仅 `WhiteAndWire` / `NormalAndWire` 模式开启。
+- 遍历 `context.scene->drawItems()` 的 `overlayMaterials[]`；
+- 每个叠加材质按 `pipelineForPass(Outline)` 解析管线（线框材质即线框 PSO）；
+- push constants 使用材质自身的 `baseColor`（线框为青绿色）；
+- 没有任何叠加材质时解析结果为空，不录制任何绘制命令。
 
-该 Pass 由 FramePipeline 拥有，控制器只持有控制接口裸指针。
+控制器不持有 Pass 指针：`WhiteAndWire` / `NormalAndWire` 只是给 drawable 的叠加材质列表加上 `Mode.Wire`。
 
 **切换开销**
 
-切换只修改 drawable 上的材质句柄 / `pipelineOverride` 和叠加 Pass 的 enable 标志，不重建任何 GPU 资源。下一帧 `scene.update()` 重建 drawItems 时自动生效。
+切换只修改 drawable 的主材质句柄与叠加材质列表，不重建任何 GPU 资源。下一帧 `scene.update()` 重建 drawItems 时自动生效。
 
 **原始材质保存/恢复**
 

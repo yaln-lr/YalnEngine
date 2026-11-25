@@ -32,6 +32,7 @@ set(VIEWER_SOURCES
     src/qtviewer.cpp
     src/mainwin.cpp
     src/yalnscenefactory.cpp
+    src/yalnmodematerial.cpp
     src/yalnrendermodecontroller.cpp
 )
 
@@ -39,6 +40,7 @@ set(VIEWER_HEADERS
     include/qtviewer.h
     include/mainwin.h
     include/yalnscenefactory.h
+    include/yalnmodematerial.h
     include/yalnrendermodecontroller.h
 )
 

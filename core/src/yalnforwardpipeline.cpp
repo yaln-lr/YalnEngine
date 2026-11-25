@@ -8,7 +8,10 @@
 
 YalnForwardFramePipeline::YalnForwardFramePipeline()
 {
+    // 方案 A：主渲染 Pass + 叠加材质 Pass（Outline）。
+    // 叠加 Pass 常驻但无开关：没有叠加材质时它不录制任何命令。
     addPass(std::make_unique<YalnForwardOpaquePass>());
+    addPass(std::make_unique<YalnMaterialOverlayPass>(YalnPassKind::Outline));
 }
 
 bool YalnForwardFramePipeline::initialize(const IYalnDevice& device,

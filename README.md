@@ -15,7 +15,7 @@ YalnEngine/
 │   │   ├── yalnrenderer.h      # 稳定帧驱动器（GPU 帧资源 + 管线/材质库）
 │   │   ├── yalnframe.h         # 帧策略接口（IYalnFramePipeline / IYalnFramePass）
 │   │   ├── yalnforwardpipeline.h # 默认 Forward 整帧策略
-│   │   ├── yalnforwardpass.h   # 默认前向 Opaque Pass
+│   │   ├── yalnforwardpass.h   # 默认前向 Pass（Opaque + 叠加材质）
 │   │   ├── yalnpipelinelibrary.h # PSO 注册表（YalnPipelineHandle）
 │   │   ├── yalnmateriallibrary.h # 材质注册表（YalnMaterialHandle）
 │   │   ├── yalnrendertypes.h   # 句柄 / Pass 掩码 / 材质推常量
@@ -30,6 +30,7 @@ YalnEngine/
 │   ├── include/qtviewer.h      # QtViewer（QWidget + 渲染循环定时器）
 │   ├── include/mainwin.h       # YalnMainWin（窗口/菜单/状态栏/初始化装配）
 │   ├── include/yalnscenefactory.h    # YalnSceneFactory（村庄场景工厂，资产持有网格）
+│   ├── include/yalnmodematerial.h # 模式专用材质（白膜/线框 PSO + 材质包装）
 │   ├── include/yalnrendermodecontroller.h # 渲染模式控制器（白膜/线框/叠加）
 │   └── src/main.cpp            # 入口：装配 QApplication + YalnMainWin
 ├── shader/shaders/             # 共享着色器源码（GLSL，构建时编译到 build/mingw/shaders）
@@ -112,7 +113,7 @@ $env:VK_LAYER_PATH = "D:/VulkanSDK/1.4.341.1/Bin"
 | `…` → `白膜+网格` | 白膜之上叠加一层青绿线框 |
 | `…` → `正常+网格` | 原色填充之上叠加一层线框 |
 
-切换只改 drawable 的材质句柄 / 管线覆盖与叠加 Pass 开关，不重建 GPU 资源，任意时刻可切、下一帧生效；线框 PSO 带深度偏移并关闭深度写入，避免与实体共面 z-fighting（详见 `docs/Viewer渲染模式与MainWindow重构.md`）。
+切换只改 drawable 的主材质句柄与叠加材质列表，不重建 GPU 资源，任意时刻可切、下一帧生效；线框 PSO 带深度偏移并关闭深度写入，避免与实体共面 z-fighting（详见 `docs/Viewer渲染模式与MainWindow重构.md`）。
 
 ### 村庄示例场景（viewer）
 
@@ -169,7 +170,7 @@ $env:VK_LAYER_PATH = "D:/VulkanSDK/1.4.341.1/Bin"
 - **验证层**: Debug 模式下启用 Vulkan 验证层
 - **着色器自动编译**: 构建时使用 glslc 自动编译 GLSL 着色器
 - **交互控制**: 键盘 + 鼠标实时控制相机，菜单控制场景加载与自动旋转
-- **渲染模式切换**: 正常 / 白膜 / 网格 / 白膜+网格 / 正常+网格 五种模式，切换只改材质句柄与管线覆盖、不重建 GPU 资源；白膜走独立 shader，线框经深度偏移叠加（详见 `docs/Viewer渲染模式与MainWindow重构.md`）
+- **渲染模式切换**: 正常 / 白膜 / 网格 / 白膜+网格 / 正常+网格 五种模式，切换只改 drawable 的主材质与叠加材质列表、不重建 GPU 资源；白膜走独立 shader，线框由常驻的叠加 Pass 绘制（详见 `docs/Viewer渲染模式与MainWindow重构.md`）
 
 ## 核心 API
 

@@ -25,7 +25,7 @@ public:
     YalnForwardFramePipeline();
     ~YalnForwardFramePipeline() override = default;
 
-    const char* name() const override { return "Forward"; }
+    std::string_view name() const override { return "Forward"; }
 
     bool initialize(const IYalnDevice& device, const IYalnSwapChain& swapChain) override;
     void shutdown() override;

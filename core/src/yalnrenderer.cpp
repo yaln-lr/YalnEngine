@@ -308,7 +308,7 @@ void YalnRenderer::destroyFrameResources()
 // ======================== 帧循环 ========================
 
 YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
-                                       const IYalnPipeline&   pipeline,
+                                       [[maybe_unused]] const IYalnPipeline& pipeline,
                             const IYalnRenderPass& renderPass,
                             IYalnScene&            scene,
                                                   const YalnCameraPtr&        camera)
@@ -318,7 +318,7 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
         return FrameResult::NotReady;
     }
 
-    (void)pipeline; // 管线的选择已下沉到材质/管线库；保留参数用于兼容旧调用
+    // 管线的选择已下沉到材质/管线库；保留参数用于兼容旧调用
 
     // 空场景也继续渲染：让 FramePipeline 执行 beginRenderPass(clearColor) 清屏，
     // drawItems 为空时自然跳过所有 draw call。这样未加载场景时背景显示
@@ -390,7 +390,7 @@ YalnFrameResult YalnRenderer::drawFrame(const IYalnSwapChain&  swapChain,
     if (m_imagesInFlight[imageIndex] != VK_NULL_HANDLE)
     {
         const std::array<vk::Fence, 1> fences = { m_imagesInFlight[imageIndex] };
-        device.waitForFences(fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
+        (void)device.waitForFences(fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
     }
     m_imagesInFlight[imageIndex] = *fence;
 

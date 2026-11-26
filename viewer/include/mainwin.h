@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QElapsedTimer>
 #include <memory>
+#include <string_view>
 
 #include "yalnscenefactory.h"
 #include "yalnrendermodecontroller.h"
@@ -27,7 +28,7 @@ public:
     ~YalnMainWin() override;
 
     // 完成渲染器配置、Vulkan 初始化、相机设置、可选命令行场景加载，并启动渲染循环。
-    bool initializeVulkan(const char* appName = "Yaln Vulkan Viewer");
+    bool initializeVulkan(std::string_view appName = "Yaln Vulkan Viewer");
 
 private slots:
     void onLoadVillage();

@@ -129,9 +129,10 @@ size_t YalnNode::countDrawables() const
     return count;
 }
 
-void YalnNode::updateWorld(const glm::mat4& parentWorld, const glm::vec3& cameraPosition)
+void YalnNode::updateWorld(const glm::mat4& parentWorld,
+                           [[maybe_unused]] const glm::vec3& cameraPosition)
 {
-    (void)cameraPosition;   // 基类不使用（公告板等覆写使用）
+    // cameraPosition 基类不使用（公告板等覆写使用）
     m_worldMatrix = parentWorld * localMatrix();
     for (const auto& child : m_children)
     {
@@ -156,10 +157,9 @@ void YalnNode::collectInstances(std::vector<YalnDrawableInstance>& out) const
 
 // ==================== YalnSpinNode ====================
 
-void YalnSpinNode::updateWorld(const glm::mat4& parentWorld, const glm::vec3& cameraPosition)
+void YalnSpinNode::updateWorld(const glm::mat4& parentWorld,
+                               [[maybe_unused]] const glm::vec3& cameraPosition)
 {
-    (void)cameraPosition;
-
     // 用内部稳定时钟累加自旋：四元数右乘（绕自身轴），无欧拉角参与
     if (m_enabled && m_speed != 0.0f)
     {

@@ -39,7 +39,7 @@ public:
     // 派生绘制项可覆盖，实现按对象/按状态切换材质或 Pass。
     // 主材质：由 setMaterial 设置，Opaque Pass 使用它。
     virtual YalnMaterialHandle material() const { return YALN_DEFAULT_MATERIAL; }
-    virtual void setMaterial(YalnMaterialHandle material) { (void)material; }
+    virtual void setMaterial([[maybe_unused]] YalnMaterialHandle material) {}
 
     // 额外叠加材质：每个 drawable 独立持有，由对应 passMask 的 Pass 叠加绘制。
     // 默认空实现，旧派生类无需修改。
@@ -48,20 +48,19 @@ public:
         static const std::vector<YalnMaterialHandle> empty;
         return empty;
     }
-    virtual void addOverlayMaterial(YalnMaterialHandle material) { (void)material; }
-    virtual bool removeOverlayMaterial(YalnMaterialHandle material)
+    virtual void addOverlayMaterial([[maybe_unused]] YalnMaterialHandle material) {}
+    virtual bool removeOverlayMaterial([[maybe_unused]] YalnMaterialHandle material)
     {
-        (void)material;
         return false;
     }
     virtual void clearOverlayMaterials() {}
 
-    virtual uint32_t passMask() const { return YALN_PASS_MASK_ALL; }
-    virtual void setPassMask(uint32_t passMask) { (void)passMask; }
+    virtual YalnPassMask passMask() const { return YALN_PASS_ALL; }
+    virtual void setPassMask([[maybe_unused]] YalnPassMask passMask) {}
 
     // 可选：跳过材质中的管线选择，直接指定 PSO（默认无效 = 走材质）
     virtual YalnPipelineHandle pipelineOverride() const { return YALN_INVALID_PIPELINE; }
-    virtual void setPipelineOverride(YalnPipelineHandle pipeline) { (void)pipeline; }
+    virtual void setPipelineOverride([[maybe_unused]] YalnPipelineHandle pipeline) {}
 };
 
 // ============================================================================
@@ -108,8 +107,8 @@ public:
     }
     void clearOverlayMaterials() override { m_overlayMaterials.clear(); }
 
-    uint32_t passMask() const override { return m_passMask; }
-    void setPassMask(uint32_t passMask) override { m_passMask = passMask; }
+    YalnPassMask passMask() const override { return m_passMask; }
+    void setPassMask(YalnPassMask passMask) override { m_passMask = passMask; }
 
     YalnPipelineHandle pipelineOverride() const override { return m_pipelineOverride; }
     void setPipelineOverride(YalnPipelineHandle pipeline) override { m_pipelineOverride = pipeline; }
@@ -141,7 +140,7 @@ private:
 
     YalnMaterialHandle m_material = YALN_DEFAULT_MATERIAL;
     std::vector<YalnMaterialHandle> m_overlayMaterials;
-    uint32_t           m_passMask = YALN_PASS_MASK_ALL;
+    YalnPassMask       m_passMask = YALN_PASS_ALL;
     YalnPipelineHandle m_pipelineOverride = YALN_INVALID_PIPELINE;
 
     Eigen::Vector3f       m_position{ Eigen::Vector3f::Zero() };

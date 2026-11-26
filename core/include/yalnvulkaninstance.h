@@ -5,6 +5,7 @@
 #include <vulkan/vulkan_raii.hpp>
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "global_type.h"
@@ -32,7 +33,8 @@ public:
     YalnVulkanInstance& operator=(const YalnVulkanInstance&) = delete;
 
     // 创建实例。extensions 由调用方（视图层）提供实例级扩展
-    bool create(const char* applicationName, const std::vector<const char*>& extensions) override;
+    bool create(std::string_view applicationName,
+                const std::vector<const char*>& extensions) override;
 
     const vk::raii::Context&  context()  const override { return m_context; }
     const vk::raii::Instance& handle()   const override { return m_instance; }

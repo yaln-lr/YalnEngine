@@ -36,12 +36,11 @@ void recordMaterialPass(const YalnFrameContext& context,
         return;
     }
 
-    const uint32_t passBit = toPassMask(pass);
     std::vector<ResolvedItem> resolved;
 
     auto resolve = [&](const YalnDrawItem& item, YalnMaterialHandle handle)
     {
-        if (item.gpuMesh == nullptr || (item.passMask & passBit) == 0)
+        if (item.gpuMesh == nullptr || !item.passMask.contains(pass))
         {
             return;
         }
@@ -64,7 +63,7 @@ void recordMaterialPass(const YalnFrameContext& context,
         }
 
         // 材质自身的 passMask 同样必须包含当前 Pass 位
-        if (material != nullptr && (material->passMask() & passBit) == 0)
+        if (material != nullptr && !material->passMask().contains(pass))
         {
             return;
         }
@@ -196,8 +195,8 @@ void recordMaterialPass(const YalnFrameContext& context,
                     *pipeline.layout(),
                     range.stageFlags,
                     range.offset,
-                    vk::ArrayProxy<const uint8_t>(
-                        bytes, reinterpret_cast<const uint8_t*>(&constants)));
+                    vk::ArrayProxy<const std::byte>(
+                        bytes, asBytes(constants)));
             }
         }
 

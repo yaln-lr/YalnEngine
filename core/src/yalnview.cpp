@@ -190,7 +190,7 @@ YalnMaterialHandle YalnView::createMaterial(const YalnMaterialDesc& desc)
 // 不变的流程：实例 → 表面 → 设备 → 交换链 → 组合校验 →
 //            渲染通道 → 管线 → 帧缓冲 → 渲染器
 // 可变部分两个入口：setXxxConfig（配置扩展）/ setXxx（继承扩展）。
-bool YalnView::initVulkan(const char* appName)
+bool YalnView::initVulkan(std::string_view appName)
 {
     if (m_initialized)
     {
@@ -456,7 +456,7 @@ bool YalnView::validateConfig(std::vector<std::string>& issues)
     return issues.empty();
 }
 
-bool YalnView::createVulkanInstance(const char* appName)
+bool YalnView::createVulkanInstance(std::string_view appName)
 {
     return m_instance->create(appName, getRequiredInstanceExtensions());
 }

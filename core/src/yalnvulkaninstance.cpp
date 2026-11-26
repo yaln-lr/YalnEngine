@@ -53,7 +53,8 @@ bool YalnVulkanInstance::checkValidationLayerSupport() const
     return requiredLayers.empty();
 }
 
-bool YalnVulkanInstance::create(const char* applicationName, const std::vector<const char*>& extensions)
+bool YalnVulkanInstance::create(std::string_view applicationName,
+                                const std::vector<const char*>& extensions)
 {
     if (YALN_ENABLE_VALIDATION_LAYER && !checkValidationLayerSupport())
     {
@@ -61,8 +62,10 @@ bool YalnVulkanInstance::create(const char* applicationName, const std::vector<c
         return false;
     }
 
+    // string_view 不保证 null 结尾，Vulkan C API 需要 C 字符串，局部拷贝一份。
+    const std::string appName(applicationName);
     vk::ApplicationInfo appInfo(
-        applicationName, 1,
+        appName.c_str(), 1,
         "YalnEngine", 1,
         VK_API_VERSION_1_0);
 

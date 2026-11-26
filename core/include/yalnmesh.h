@@ -6,10 +6,21 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/glm.hpp>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "yalnvertex.h"
 #include "global_type.h"
+
+// 类型化顶点数据视图：替代裸 const void* + 分离的 stride/count 参数。
+struct YALN_CORE_EXPORT YalnVertexView
+{
+    const std::byte* data   = nullptr;
+    std::size_t      count  = 0;
+    std::size_t      stride = 0;
+
+    [[nodiscard]] bool empty() const noexcept { return data == nullptr || count == 0; }
+};
 
 // ============================================================================
 //  YalnMesh —— 网格抽象接口（纯虚，不含数据与实现）
@@ -26,14 +37,25 @@ public:
     virtual const std::vector<YalnVertexPC>& getVertices() const = 0;
     virtual const std::vector<uint32_t>&     getIndices()  const = 0;
 
-    // 通用顶点数据视图。默认把 getVertices() 当作 YalnVertexPC 数组；
-    // 自定义顶点格式的网格可覆盖这三个方法，并在管线配置中声明对应布局。
+    // 类型化顶点数据视图。默认把 getVertices() 当作 YalnVertexPC 数组；
+    // 自定义顶点格式的网格覆盖 vertexView()，并在管线配置中声明对应布局。
+    virtual YalnVertexView vertexView() const
+    {
+        const auto& vertices = getVertices();
+        return {
+            reinterpret_cast<const std::byte*>(vertices.data()),
+            vertices.size(),
+            sizeof(YalnVertexPC)
+        };
+    }
+
+    // 兼容旧接口：保留但标记弃用倾向。新代码应使用 vertexView()。
     virtual const void* getVertexData() const
     {
-        return static_cast<const void*>(getVertices().data());
+        return vertexView().data;
     }
-    virtual size_t getVertexStride() const { return sizeof(YalnVertexPC); }
-    virtual size_t getVertexCount()  const { return getVertices().size(); }
+    virtual size_t getVertexStride() const { return vertexView().stride; }
+    virtual size_t getVertexCount()  const { return vertexView().count; }
 
     // 模型矩阵（YalnRenderer 每帧经 Push Constants 上传）
     virtual glm::mat4 getModelMatrix() const = 0;
@@ -46,10 +68,9 @@ public:
 
     // 局部空间包围盒；默认实现不支持（返回 false）。
     // 场景 update() 用它生成绘制项的世界空间包围盒，供后续剔除/排序使用。
-    virtual bool getLocalBounds(glm::vec3& minBounds, glm::vec3& maxBounds) const
+    virtual bool getLocalBounds([[maybe_unused]] glm::vec3& minBounds,
+                                [[maybe_unused]] glm::vec3& maxBounds) const
     {
-        (void)minBounds;
-        (void)maxBounds;
         return false;
     }
 };

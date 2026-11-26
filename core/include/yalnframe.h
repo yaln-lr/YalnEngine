@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.hpp>
 
 #include <cstdint>
+#include <string_view>
 
 #include "global_type.h"
 #include "yalninterfaces.h"
@@ -51,22 +52,20 @@ class YALN_CORE_EXPORT IYalnFramePass
 public:
     virtual ~IYalnFramePass() = default;
 
-    virtual const char* name() const = 0;
-    virtual uint32_t    passMask() const = 0;
+    virtual std::string_view name() const = 0;
+    virtual YalnPassMask     passMask() const = 0;
 
     // 交换链创建/重建时调用；无资源的 Pass 可保持默认实现。
-    virtual bool initialize(const IYalnDevice& device, const IYalnSwapChain& swapChain)
+    virtual bool initialize([[maybe_unused]] const IYalnDevice& device,
+                            [[maybe_unused]] const IYalnSwapChain& swapChain)
     {
-        (void)device;
-        (void)swapChain;
         return true;
     }
 
     virtual void shutdown() {}
 
-    virtual bool recreate(const IYalnSwapChain& swapChain)
+    virtual bool recreate([[maybe_unused]] const IYalnSwapChain& swapChain)
     {
-        (void)swapChain;
         return true;
     }
 
@@ -80,20 +79,18 @@ class YALN_CORE_EXPORT IYalnFramePipeline
 public:
     virtual ~IYalnFramePipeline() = default;
 
-    virtual const char* name() const = 0;
+    virtual std::string_view name() const = 0;
 
-    virtual bool initialize(const IYalnDevice& device, const IYalnSwapChain& swapChain)
+    virtual bool initialize([[maybe_unused]] const IYalnDevice& device,
+                            [[maybe_unused]] const IYalnSwapChain& swapChain)
     {
-        (void)device;
-        (void)swapChain;
         return true;
     }
 
     virtual void shutdown() {}
 
-    virtual bool recreate(const IYalnSwapChain& swapChain)
+    virtual bool recreate([[maybe_unused]] const IYalnSwapChain& swapChain)
     {
-        (void)swapChain;
         return true;
     }
 

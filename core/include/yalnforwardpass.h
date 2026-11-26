@@ -18,8 +18,8 @@
 class YALN_CORE_EXPORT YalnForwardOpaquePass : public IYalnFramePass
 {
 public:
-    const char* name() const override { return "Forward.Opaque"; }
-    uint32_t    passMask() const override { return toPassMask(YalnPassKind::Opaque); }
+    std::string_view name() const override { return "Forward.Opaque"; }
+    YalnPassMask passMask() const override { return ::passMask(YalnPassKind::Opaque); }
 
     void record(const YalnFrameContext& context) override;
 };
@@ -43,8 +43,8 @@ class YALN_CORE_EXPORT YalnMaterialOverlayPass : public IYalnFramePass
 public:
     explicit YalnMaterialOverlayPass(YalnPassKind pass) : m_pass(pass) {}
 
-    const char* name() const override { return "Forward.MaterialOverlay"; }
-    uint32_t    passMask() const override { return toPassMask(m_pass); }
+    std::string_view name() const override { return "Forward.MaterialOverlay"; }
+    YalnPassMask passMask() const override { return ::passMask(m_pass); }
 
     YalnPassKind pass() const { return m_pass; }
     void setPass(YalnPassKind pass) { m_pass = pass; }

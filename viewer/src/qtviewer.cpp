@@ -90,7 +90,7 @@ bool QtViewer::createSurface()
 #endif
 }
 
-bool QtViewer::initialize(const char* appName)
+bool QtViewer::initialize(std::string_view appName)
 {
     // 调用基类初始化（内部按顺序驱动各子系统）
     if (!initVulkan(appName)) {

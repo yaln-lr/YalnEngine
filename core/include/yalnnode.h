@@ -99,7 +99,7 @@ public:
         }
     }
 
-    void setPassMaskRecursive(uint32_t passMask)
+    void setPassMaskRecursive(YalnPassMask passMask)
     {
         for (const auto& drawable : m_drawables)
         {

@@ -2,6 +2,7 @@
 #define YALN_MODE_MATERIAL_H
 
 #include <memory>
+#include <string_view>
 
 #include "global_type.h"
 #include "yalnrendertypes.h"
@@ -25,7 +26,7 @@ class YalnModeMaterial
 public:
     virtual ~YalnModeMaterial() = default;
 
-    virtual const char* name() const = 0;
+    virtual std::string_view name() const = 0;
 
     // 创建专用 PSO + 材质（幂等；首次成功后不再重建）。
     virtual bool create() = 0;
@@ -55,7 +56,7 @@ public:
     explicit YalnWhiteModelMaterial(YalnView& view);
     ~YalnWhiteModelMaterial() override;
 
-    const char* name() const override { return "Mode.White"; }
+    std::string_view name() const override { return "Mode.White"; }
     bool create() override;
 
 private:
@@ -74,7 +75,7 @@ class YalnWireframeMaterial : public YalnModeMaterial
 public:
     explicit YalnWireframeMaterial(YalnView& view);
 
-    const char* name() const override { return "Mode.Wire"; }
+    std::string_view name() const override { return "Mode.Wire"; }
     bool create() override;
 };
 

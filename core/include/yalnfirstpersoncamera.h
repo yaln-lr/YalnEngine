@@ -56,7 +56,7 @@ public:
     // 把"看向某点"转换为朝向四元数（可看向任意方向，包括天顶/天底）
     void setTarget(const glm::vec3& target) override;
     // 向上方向固定为世界 Z 轴，忽略外部设置
-    void setUp(const glm::vec3& up) override { (void)up; }
+    void setUp([[maybe_unused]] const glm::vec3& up) override {}
     // 目标点等价于 position + forward
     glm::vec3 getTarget() const override { return m_position + forward(); }
 

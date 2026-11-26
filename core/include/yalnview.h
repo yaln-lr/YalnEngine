@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "global_type.h"
@@ -49,7 +50,7 @@ public:
     YalnView& operator=(const YalnView&) = delete;
 
     // 按顺序初始化全部 Vulkan 子系统（失败时查看 lastError()）
-    bool initVulkan(const char* appName);
+    bool initVulkan(std::string_view appName);
 
     void printCapacity();
 
@@ -135,7 +136,7 @@ public:
     const std::string& lastError() const { return m_lastError; }
 
 protected:
-    virtual bool init(){};
+    virtual bool init() { return true; }
 
     // 由平台层实现：使用自己的窗口句柄创建表面并写入 surface()
     virtual bool createSurface() = 0;
@@ -148,7 +149,7 @@ protected:
     void         drawFrame();
 
 private:
-    bool createVulkanInstance(const char* appName);
+    bool createVulkanInstance(std::string_view appName);
     void createMeshBuffers();
 
     // 组合合理性校验：依赖设备/交换链信息，在两者创建后、子系统创建前调用。

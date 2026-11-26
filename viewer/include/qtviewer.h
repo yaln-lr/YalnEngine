@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QKeyEvent>
+#include <string_view>
 #include <QMouseEvent>
 #include <QWheelEvent>
 #include <QTimer>
@@ -22,7 +23,7 @@ public:
     void startRenderLoop();
 
     // 初始化 Vulkan
-    bool initialize(const char* appName = "QtViewer App");
+    bool initialize(std::string_view appName = "QtViewer App");
 
 signals:
     void frameRendered(int frameIndex);

@@ -25,18 +25,13 @@ struct YALN_CORE_EXPORT YalnMaterialDesc
 {
     std::string name = "Material";
 
-    glm::vec4 baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
-    uint32_t  passMask = YALN_PASS_MASK_ALL;
+    glm::vec4   baseColor{ 1.0f, 1.0f, 1.0f, 1.0f };
+    YalnPassMask passMask = YALN_PASS_ALL;
 
     YalnPipelineHandle defaultPipeline = YALN_DEFAULT_PIPELINE;
 
-    std::array<YalnPipelineHandle, YALN_PASS_SLOT_COUNT> passPipelines = {
-        YALN_INVALID_PIPELINE,
-        YALN_INVALID_PIPELINE,
-        YALN_INVALID_PIPELINE,
-        YALN_INVALID_PIPELINE,
-        YALN_INVALID_PIPELINE
-    };
+    // 强类型句柄默认构造即无效，无需逐个写 YALN_INVALID_PIPELINE。
+    std::array<YalnPipelineHandle, YALN_PASS_SLOT_COUNT> passPipelines{};
 
     // 为某个 Pass 指定专用管线（例如 Opaque 用 PBR、Shadow 用深度管线）
     void setPipeline(YalnPassKind pass, YalnPipelineHandle pipeline);
@@ -49,7 +44,7 @@ public:
 
     const YalnMaterialDesc& desc() const { return m_desc; }
     const glm::vec4&        baseColor() const { return m_desc.baseColor; }
-    uint32_t                passMask() const { return m_desc.passMask; }
+    YalnPassMask            passMask() const { return m_desc.passMask; }
 
     // 运行期更新材质参数（下一帧生效；当前仅 baseColor）
     void setBaseColor(const glm::vec4& color) { m_desc.baseColor = color; }
@@ -76,9 +71,9 @@ public:
     YalnMaterialLibrary& operator=(const YalnMaterialLibrary&) = delete;
 
     YalnMaterialHandle       createMaterial(YalnMaterialDesc desc);
-    YalnMaterial*            get(YalnMaterialHandle handle);
-    const YalnMaterial*      get(YalnMaterialHandle handle) const;
-    bool                     isValid(YalnMaterialHandle handle) const;
+    YalnMaterial*            get(YalnMaterialHandle handle) noexcept;
+    const YalnMaterial*      get(YalnMaterialHandle handle) const noexcept;
+    [[nodiscard]] bool       contains(YalnMaterialHandle handle) const noexcept;
 
     std::size_t size() const { return m_materials.size(); }
     void        clear();

@@ -2,6 +2,7 @@
 #define YALN_RENDER_MODE_CONTROLLER_H
 
 #include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -34,7 +35,7 @@ enum class YalnRenderMode : uint8_t
     NormalAndWire
 };
 
-inline const char* toString(YalnRenderMode mode)
+inline std::string_view toString(YalnRenderMode mode)
 {
     switch (mode)
     {
@@ -64,7 +65,7 @@ public:
     ~YalnRenderModeController();
 
     YalnRenderMode mode() const { return m_mode; }
-    const char* modeName() const { return toString(m_mode); }
+    std::string_view modeName() const { return toString(m_mode); }
 
     bool setMode(YalnRenderMode mode);
 

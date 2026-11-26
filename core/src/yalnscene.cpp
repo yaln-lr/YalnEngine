@@ -149,12 +149,10 @@ bool YalnScene::buildGpuBuffers(const IYalnDevice& device, const vk::raii::Comma
     for (size_t i = 0; i < m_meshes.size(); ++i)
     {
         YalnMesh* mesh = m_meshes[i];
-        const auto& indices  = mesh->getIndices();
-        const void* vertexData = mesh->getVertexData();
-        const size_t vertexCount = mesh->getVertexCount();
-        const size_t vertexStride = mesh->getVertexStride();
+        const auto& indices = mesh->getIndices();
+        const YalnVertexView vertices = mesh->vertexView();
 
-        if (vertexData == nullptr || vertexCount == 0 || vertexStride == 0 || indices.empty())
+        if (vertices.empty() || vertices.stride == 0 || indices.empty())
         {
             continue;
         }
@@ -162,9 +160,9 @@ bool YalnScene::buildGpuBuffers(const IYalnDevice& device, const vk::raii::Comma
         YalnGpuMesh gpuMesh;
         gpuMesh.indexCount = static_cast<uint32_t>(indices.size());
 
-        const vk::DeviceSize vertexSize = vertexStride * vertexCount;
+        const vk::DeviceSize vertexSize = vertices.stride * vertices.count;
         if (!YalnBuffer::uploadDeviceLocal(device, commandPool,
-                                           vertexData, vertexSize,
+                                           vertices.data, vertexSize,
                                            vk::BufferUsageFlagBits::eVertexBuffer,
                                            gpuMesh.vertexBuffer))
         {
@@ -184,7 +182,7 @@ bool YalnScene::buildGpuBuffers(const IYalnDevice& device, const vk::raii::Comma
         m_gpuMeshes.push_back(std::move(gpuMesh));
 
         std::cout << "YalnScene: mesh buffer created [" << i << "] (vertices: "
-                  << vertexCount << ", indices: " << indices.size() << ")" << std::endl;
+                  << vertices.count << ", indices: " << indices.size() << ")" << std::endl;
     }
 
     return !m_gpuMeshes.empty();

@@ -41,8 +41,8 @@ public:
     YalnPipelineHandle addExternal(const IYalnPipeline& pipeline,
                                    std::string           name = {});
 
-    const IYalnPipeline* get(YalnPipelineHandle handle) const;
-    bool                 isValid(YalnPipelineHandle handle) const;
+    const IYalnPipeline* get(YalnPipelineHandle handle) const noexcept;
+    [[nodiscard]] bool   contains(YalnPipelineHandle handle) const noexcept;
 
     std::size_t size() const { return m_entries.size(); }
     void        clear();

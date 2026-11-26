@@ -4,7 +4,7 @@
 
 void YalnMaterialDesc::setPipeline(YalnPassKind pass, YalnPipelineHandle pipeline)
 {
-    const uint32_t index = toPassIndex(pass);
+    const std::uint32_t index = toPassIndex(pass);
     if (index < passPipelines.size())
     {
         passPipelines[index] = pipeline;
@@ -18,11 +18,11 @@ YalnMaterial::YalnMaterial(YalnMaterialDesc desc)
 
 YalnPipelineHandle YalnMaterial::pipelineForPass(YalnPassKind pass) const
 {
-    const uint32_t index = toPassIndex(pass);
+    const std::uint32_t index = toPassIndex(pass);
     if (index < m_desc.passPipelines.size())
     {
         const YalnPipelineHandle specific = m_desc.passPipelines[index];
-        if (specific != YALN_INVALID_PIPELINE)
+        if (specific.valid())
         {
             return specific;
         }
@@ -32,34 +32,45 @@ YalnPipelineHandle YalnMaterial::pipelineForPass(YalnPassKind pass) const
 
 YalnMaterialLibrary::~YalnMaterialLibrary() = default;
 
+namespace
+{
+std::size_t toIndex(YalnMaterialHandle handle) noexcept
+{
+    return static_cast<std::size_t>(handle.value());
+}
+}  // namespace
+
 YalnMaterialHandle YalnMaterialLibrary::createMaterial(YalnMaterialDesc desc)
 {
     auto material = std::make_unique<YalnMaterial>(std::move(desc));
 
-    const auto handle = static_cast<YalnMaterialHandle>(m_materials.size());
+    const auto handle = YalnMaterialHandle(
+        static_cast<YalnMaterialHandle::value_type>(m_materials.size()));
     m_materials.push_back(std::move(material));
     return handle;
 }
 
-YalnMaterial* YalnMaterialLibrary::get(YalnMaterialHandle handle)
+YalnMaterial* YalnMaterialLibrary::get(YalnMaterialHandle handle) noexcept
 {
-    if (handle >= m_materials.size())
+    if (!handle.valid())
     {
         return nullptr;
     }
-    return m_materials[handle].get();
+    const std::size_t index = toIndex(handle);
+    return index < m_materials.size() ? m_materials[index].get() : nullptr;
 }
 
-const YalnMaterial* YalnMaterialLibrary::get(YalnMaterialHandle handle) const
+const YalnMaterial* YalnMaterialLibrary::get(YalnMaterialHandle handle) const noexcept
 {
-    if (handle >= m_materials.size())
+    if (!handle.valid())
     {
         return nullptr;
     }
-    return m_materials[handle].get();
+    const std::size_t index = toIndex(handle);
+    return index < m_materials.size() ? m_materials[index].get() : nullptr;
 }
 
-bool YalnMaterialLibrary::isValid(YalnMaterialHandle handle) const
+bool YalnMaterialLibrary::contains(YalnMaterialHandle handle) const noexcept
 {
     return get(handle) != nullptr;
 }
@@ -79,7 +90,7 @@ YalnMaterialHandle YalnMaterialLibrary::ensureDefault(YalnPipelineHandle default
     YalnMaterialDesc desc;
     desc.name            = "Default";
     desc.baseColor       = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-    desc.passMask        = YALN_PASS_MASK_ALL;
+    desc.passMask        = YALN_PASS_ALL;
     desc.defaultPipeline = defaultPipeline;
 
     return createMaterial(std::move(desc));

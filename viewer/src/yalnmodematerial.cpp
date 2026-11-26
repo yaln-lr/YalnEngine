@@ -44,7 +44,7 @@ bool YalnWhiteModelMaterial::create()
     }
 
     YalnMaterialDesc desc;
-    desc.name = name();
+    desc.name = std::string(name());
     desc.baseColor = glm::vec4(1.0f);
     desc.passMask = toPassMask(YalnPassKind::Opaque);
     desc.defaultPipeline = m_pipeline;
@@ -98,7 +98,7 @@ bool YalnWireframeMaterial::create()
     }
 
     YalnMaterialDesc desc;
-    desc.name = name();
+    desc.name = std::string(name());
     desc.baseColor = glm::vec4(0.35f, 1.0f, 0.65f, 1.0f);  // 青绿色线框调制
     // Opake + Outline：既能作主材质画线框，也能作为叠加材质叠加绘制。
     desc.passMask = toPassMask(YalnPassKind::Opaque) |

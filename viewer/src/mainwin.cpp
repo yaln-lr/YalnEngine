@@ -275,7 +275,7 @@ void YalnMainWin::onRenderModeTriggered(QAction* action)
     if (m_modeController->setMode(mode))
     {
         showStatus(QString::fromUtf8("渲染模式: %1")
-                       .arg(QString::fromUtf8(m_modeController->modeName())));
+                       .arg(QString::fromStdString(std::string(m_modeController->modeName()))));
     }
     else
     {
@@ -307,10 +307,10 @@ void YalnMainWin::applyRenderExtensionDemo()
     {
         windmill->setMaterialRecursive(tintMaterial);
     }
-    std::cout << "[Demo] tintMaterial=" << tintMaterial << std::endl;
+    std::cout << "[Demo] tintMaterial=" << tintMaterial.value() << std::endl;
 }
 
-bool YalnMainWin::initializeVulkan(const char* appName)
+bool YalnMainWin::initializeVulkan(std::string_view appName)
 {
     show();
 

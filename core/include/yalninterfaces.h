@@ -28,6 +28,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "global_type.h"
@@ -180,7 +181,7 @@ struct YALN_CORE_EXPORT YalnDrawItem {
     std::vector<YalnMaterialHandle> overlayMaterials;
 
     // 该绘制项参与的 Pass 位掩码（默认全部 Pass）
-    uint32_t passMask = YALN_PASS_MASK_ALL;
+    YalnPassMask passMask = YALN_PASS_ALL;
 
     // 可选：直接覆盖材质中的管线选择（调试/特殊对象用，默认无）
     YalnPipelineHandle pipelineOverride = YALN_INVALID_PIPELINE;
@@ -199,7 +200,8 @@ class YALN_CORE_EXPORT IYalnInstance
 public:
     virtual ~IYalnInstance() = default;
 
-    virtual bool create(const char* applicationName, const std::vector<const char*>& extensions) = 0;
+    virtual bool create(std::string_view applicationName,
+                        const std::vector<const char*>& extensions) = 0;
     virtual void destroy() {}
 
     virtual const vk::raii::Context&  context() const = 0;
@@ -496,9 +498,9 @@ public:
 
     // ---- 帧级策略与资源库扩展点 ----
     // 默认实现返回 false/nullptr；自定义渲染器可不支持。
-    virtual bool setFramePipeline(std::unique_ptr<IYalnFramePipeline>&& pipeline)
+    virtual bool setFramePipeline(
+        [[maybe_unused]] std::unique_ptr<IYalnFramePipeline>&& pipeline)
     {
-        (void)pipeline;
         return false;
     }
 
